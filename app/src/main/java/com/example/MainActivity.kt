@@ -69,25 +69,41 @@ class MainActivity : ComponentActivity() {
           ) {
             composable("signin") {
               WelcomeScreen(
-                onNavigateToSignUp = { navController.navigate("signup") },
+                onNavigateToSignUp = {
+                  if (navController.currentDestination?.route == "signin") {
+                    navController.navigate("signup")
+                  }
+                },
                 onSignIn = {
-                  navController.navigate("home") {
-                    popUpTo("signin") { inclusive = true }
+                  if (navController.currentDestination?.route == "signin") {
+                    navController.navigate("home") {
+                      popUpTo("signin") { inclusive = true }
+                    }
                   }
                 }
               )
             }
             composable("signup") {
               SignUpScreen(
-                onNavigateToSignIn = { navController.popBackStack() },
-                onSignUpComplete = { navController.navigate("onboarding") }
+                onNavigateToSignIn = {
+                  if (navController.currentDestination?.route == "signup") {
+                    navController.popBackStack()
+                  }
+                },
+                onSignUpComplete = {
+                  if (navController.currentDestination?.route == "signup") {
+                    navController.navigate("onboarding")
+                  }
+                }
               )
             }
             composable("onboarding") {
               OnboardingPagerScreen(
                 onGetStarted = {
-                  navController.navigate("home") {
-                    popUpTo("onboarding") { inclusive = true }
+                  if (navController.currentDestination?.route == "onboarding") {
+                    navController.navigate("home") {
+                      popUpTo("onboarding") { inclusive = true }
+                    }
                   }
                 }
               )
