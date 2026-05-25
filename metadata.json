@@ -1,0 +1,6 @@
+{
+  "name": "Sanctuary",
+  "description": "A cozy digital sanctuary app with a styled login screen.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
