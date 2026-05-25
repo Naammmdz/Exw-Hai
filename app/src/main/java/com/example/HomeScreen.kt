@@ -37,7 +37,8 @@ import kotlinx.coroutines.launch
 enum class Tab {
   HEARTH,
   MOMENTS,
-  TIMELINE
+  TIMELINE,
+  MOMENTS_UNUSED
 }
 
 data class CircleMember(
@@ -50,6 +51,18 @@ data class CircleMember(
   val avatarUrl: String
 )
 
+data class Moment(
+  val id: Int,
+  val senderName: String,
+  val senderLocation: String,
+  val timeAgo: String,
+  val imageUrl: String,
+  val caption: String,
+  val isLiked: Boolean = false,
+  val isGroupReacted: Boolean = false,
+  val isCafeReacted: Boolean = false
+)
+
 @OptIn(ExperimentalAnimationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(modifier: Modifier = Modifier) {
@@ -58,6 +71,33 @@ fun HomeScreen(modifier: Modifier = Modifier) {
   var nudgeSentTo by remember { mutableStateOf<String?>(null) }
   var showAddDialog by remember { mutableStateOf(false) }
   var pendingLucasRequest by remember { mutableStateOf(true) }
+  var showAddMomentDialog by remember { mutableStateOf(false) }
+  var isPremium by remember { mutableStateOf(false) }
+
+  var moments by remember {
+    mutableStateOf(
+      listOf(
+        Moment(
+          id = 1,
+          senderName = "Sarah",
+          senderLocation = "Viewing from Kitchen",
+          timeAgo = "Just Now",
+          imageUrl = "https://lh3.googleusercontent.com/aida-public/AB6AXuAvKfuLatEhX6uVQDLteBY--4oCb0e7gbj-FxXGuIvGdPyVhLfhSLW4e5MO61hIKbkyBF2kyQhfKsoG_aWdDzN18eUHnL_3SQDu-WzlhxAygX8IpgR2DX9EL6_i21iZPlF_VCG5Kpa7HJwQHJgJOA2nBUU_PPkMNoHColxMv29dbkHZmAUeDfbJ343VMV61u-VKC9vZKh0HwivV5LR_iu5t61Vw4q7pIMf1BPJJLSlDMMTxiaQSYLxg-VAnpUK-IcZFZdIE7e11a1WW",
+          caption = "Morning coffee ritual ☕️",
+          isLiked = true
+        ),
+        Moment(
+          id = 2,
+          senderName = "Mom",
+          senderLocation = "Home",
+          timeAgo = "2h ago",
+          imageUrl = "https://lh3.googleusercontent.com/aida-public/AB6AXuDaQ3JHXMg-yreCynieKHzmeh3qKIapP-eBzzyhkUg9w8d20L6oZdUVnhuXKbu8Z23OPoIaoA9kQToa9Clgb0gMVEWvjayydI_k70obWFqphvQGcAVjB7ua-ckHAn1A_cQKGrNtlxUp6g6WmmyB_8bfhhXjdwt_bZ6vSOxgovT22HAHuuHnAW86d2Pl0QHLLkxrMwNF7-8fDLbIFI7G5vvUVvbkAVwZcV1iUcvEujjbM5gRyDyTgc-mnZLpwRwYS_ODfOZLOosnKZ9U",
+          caption = "Nap time is sacred 😴",
+          isGroupReacted = true
+        )
+      )
+    )
+  }
 
   // Circle members state list
   var circleMembers by remember {
@@ -306,7 +346,18 @@ fun HomeScreen(modifier: Modifier = Modifier) {
           }
 
           Tab.MOMENTS -> {
-            // MOMENTS Tab Content (My Circle)
+            // MOMENTS Tab Content (Moments Feed)
+            MomentsScreen(
+              moments = moments,
+              onMomentsChange = { moments = it },
+              showAddMomentDialog = showAddMomentDialog,
+              onShowAddMomentDialogChange = { showAddMomentDialog = it },
+              isPremium = isPremium,
+              onIsPremiumChange = { isPremium = it }
+            )
+          }
+
+          Tab.MOMENTS_UNUSED -> {
             Column(
               modifier = Modifier
                 .fillMaxSize()
@@ -1158,6 +1209,118 @@ fun HomeScreen(modifier: Modifier = Modifier) {
         shape = RoundedCornerShape(24.dp)
       )
     }
+
+    // Cozy Custom Add Moment Dialog
+    if (showAddMomentDialog) {
+      var caption by remember { mutableStateOf("") }
+      var selectedImageIndex by remember { mutableStateOf(0) }
+      val presetImages = listOf(
+        "https://lh3.googleusercontent.com/aida-public/AB6AXuAvKfuLatEhX6uVQDLteBY--4oCb0e7gbj-FxXGuIvGdPyVhLfhSLW4e5MO61hIKbkyBF2kyQhfKsoG_aWdDzN18eUHnL_3SQDu-WzlhxAygX8IpgR2DX9EL6_i21iZPlF_VCG5Kpa7HJwQHJgJOA2nBUU_PPkMNoHColxMv29dbkHZmAUeDfbJ343VMV61u-VKC9vZKh0HwivV5LR_iu5t61Vw4q7pIMf1BPJJLSlDMMTxiaQSYLxg-VAnpUK-IcZFZdIE7e11a1WW",
+        "https://lh3.googleusercontent.com/aida-public/AB6AXuDaQ3JHXMg-yreCynieKHzmeh3qKIapP-eBzzyhkUg9w8d20L6oZdUVnhuXKbu8Z23OPoIaoA9kQToa9Clgb0gMVEWvjayydI_k70obWFqphvQGcAVjB7ua-ckHAn1A_cQKGrNtlxUp6g6WmmyB_8bfhhXjdwt_bZ6vSOxgovT22HAHuuHnAW86d2Pl0QHLLkxrMwNF7-8fDLbIFI7G5vvUVvbkAVwZcV1iUcvEujjbM5gRyDyTgc-mnZLpwRwYS_ODfOZLOosnKZ9U",
+        "https://images.unsplash.com/photo-1498804103079-a6351b050096?auto=format&fit=crop&w=400&q=80",
+        "https://images.unsplash.com/photo-1513001900722-370f803f498d?auto=format&fit=crop&w=400&q=80"
+      )
+
+      AlertDialog(
+        onDismissRequest = { showAddMomentDialog = false },
+        confirmButton = {
+          Button(
+            onClick = {
+              if (caption.isNotEmpty()) {
+                val newMoment = Moment(
+                  id = moments.size + 1,
+                  senderName = "Alex (You)",
+                  senderLocation = "Living Room",
+                  timeAgo = "Just Now",
+                  imageUrl = presetImages[selectedImageIndex],
+                  caption = caption
+                )
+                moments = listOf(newMoment) + moments
+                showAddMomentDialog = false
+              }
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = Apricot),
+            shape = RoundedCornerShape(12.dp)
+          ) {
+            Text("Share", color = Color.White, fontWeight = FontWeight.Bold)
+          }
+        },
+        dismissButton = {
+          TextButton(onClick = { showAddMomentDialog = false }) {
+            Text("Cancel", color = Taupe)
+          }
+        },
+        title = {
+          Text(
+            text = "Share a Cozy Moment 📸",
+            color = Cocoa,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 20.sp
+          )
+        },
+        text = {
+          Column(
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            Text(
+              text = "Capture a sweet instant from your day and share it with your inner circle.",
+              color = Taupe,
+              fontSize = 14.sp
+            )
+
+            OutlinedTextField(
+              value = caption,
+              onValueChange = { caption = it },
+              label = { Text("Caption (e.g. Afternoon light ✨)") },
+              colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Apricot,
+                focusedLabelColor = Apricot,
+                unfocusedBorderColor = Cocoa.copy(alpha = 0.2f)
+              ),
+              modifier = Modifier.fillMaxWidth(),
+              singleLine = true
+            )
+
+            Text(
+              text = "Select an Image Vibe:",
+              color = Cocoa,
+              fontWeight = FontWeight.Bold,
+              fontSize = 14.sp
+            )
+
+            Row(
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+              modifier = Modifier.fillMaxWidth()
+            ) {
+              presetImages.forEachIndexed { index, url ->
+                val isSelected = selectedImageIndex == index
+                Surface(
+                  modifier = Modifier
+                    .size(54.dp)
+                    .clickable { selectedImageIndex = index }
+                    .border(
+                      width = 3.dp,
+                      color = if (isSelected) Apricot else Color.Transparent,
+                      shape = RoundedCornerShape(12.dp)
+                    ),
+                  shape = RoundedCornerShape(12.dp)
+                ) {
+                  AsyncImage(
+                    model = url,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                  )
+                }
+              }
+            }
+          }
+        },
+        containerColor = Cream,
+        shape = RoundedCornerShape(24.dp)
+      )
+    }
   }
 }
 
@@ -1189,5 +1352,387 @@ fun BottomNavItem(
       fontWeight = FontWeight.ExtraBold,
       letterSpacing = 1.sp
     )
+  }
+}
+
+@Composable
+fun MomentsScreen(
+  moments: List<Moment>,
+  onMomentsChange: (List<Moment>) -> Unit,
+  showAddMomentDialog: Boolean,
+  onShowAddMomentDialogChange: (Boolean) -> Unit,
+  isPremium: Boolean,
+  onIsPremiumChange: (Boolean) -> Unit
+) {
+  Box(modifier = Modifier.fillMaxSize()) {
+    Column(
+      modifier = Modifier
+        .fillMaxSize()
+        .verticalScroll(rememberScrollState())
+    ) {
+      // Header
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(start = 32.dp, end = 32.dp, top = 20.dp, bottom = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Column {
+          Text(
+            text = "Moments",
+            color = Cocoa,
+            fontSize = 32.sp,
+            fontWeight = FontWeight.ExtraBold
+          )
+          Spacer(modifier = Modifier.height(4.dp))
+          Text(
+            text = "Shared close to heart",
+            color = Taupe,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium
+          )
+        }
+
+        // Profile Avatar with Online Status
+        Box(
+          modifier = Modifier.size(52.dp),
+          contentAlignment = Alignment.BottomEnd
+        ) {
+          Surface(
+            modifier = Modifier.size(48.dp),
+            shape = CircleShape,
+            border = BorderStroke(2.dp, Color.White),
+            shadowElevation = 4.dp
+          ) {
+            AsyncImage(
+              model = "https://lh3.googleusercontent.com/aida-public/AB6AXuBbpVsjLgO8uGCHakEuiwV-6RFPI2mIH922q9L1T5BD36b5xJrpbsUNc7nyrfTV5ky2pXv0OKkhyUvjZpyT-molKGEUsCy5NpKtk9ZN1ZD3g1hE_XXzRgCy-sQokrnIsF4yivsvFSL0Vk8Wa3OZEeQEhkw4v46oKNrwu4-DVGhZ29L7M4P24fuVmMldi9SZHtqVSMLKjOJzMKxROcz5wwHGXl4zRjw-EQ5k4AAZt9sv3-ovWEsgeVziZ0WFGWzGT4RaE70vr8dJuCj0",
+              contentDescription = "My profile",
+              modifier = Modifier.fillMaxSize(),
+              contentScale = ContentScale.Crop
+            )
+          }
+          // Status dot
+          Box(
+            modifier = Modifier
+              .size(14.dp)
+              .background(Color(0xFF4ADE80), CircleShape)
+              .border(2.dp, Color.White, CircleShape)
+          )
+        }
+      }
+
+      Spacer(modifier = Modifier.height(8.dp))
+
+      // Premium Upgrade Banner
+      Surface(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(horizontal = 24.dp, vertical = 8.dp)
+          .clickable { onIsPremiumChange(!isPremium) },
+        color = if (isPremium) Sage.copy(alpha = 0.3f) else Apricot.copy(alpha = 0.8f),
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.6f)),
+        shadowElevation = 3.dp
+      ) {
+        Row(
+          modifier = Modifier.padding(16.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+          Box(
+            modifier = Modifier
+              .size(48.dp)
+              .background(Color.White.copy(alpha = 0.4f), CircleShape),
+            contentAlignment = Alignment.Center
+          ) {
+            Icon(
+              imageVector = Icons.Rounded.Star,
+              contentDescription = null,
+              tint = Cocoa,
+              modifier = Modifier.size(28.dp)
+            )
+          }
+
+          Column(modifier = Modifier.weight(1f)) {
+            Text(
+              text = if (isPremium) "Premium Active! 🌟" else "Upgrade to Premium",
+              color = Cocoa,
+              fontWeight = FontWeight.Bold,
+              fontSize = 18.sp,
+              lineHeight = 22.sp
+            )
+            Text(
+              text = if (isPremium) "Enjoying unlimited moments & shared storage." else "Unlock unlimited moments & shared storage",
+              color = Cocoa.copy(alpha = 0.7f),
+              fontSize = 12.sp,
+              fontWeight = FontWeight.Medium
+            )
+          }
+
+          Icon(
+            imageVector = Icons.Rounded.KeyboardArrowRight,
+            contentDescription = null,
+            tint = Cocoa.copy(alpha = 0.6f)
+          )
+        }
+      }
+
+      Spacer(modifier = Modifier.height(8.dp))
+
+      // Moments Feed List
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(start = 24.dp, end = 24.dp, bottom = 120.dp),
+        verticalArrangement = Arrangement.spacedBy(28.dp)
+      ) {
+        moments.forEach { moment ->
+          Column(modifier = Modifier.fillMaxWidth()) {
+            // Date Header
+            Row(
+              modifier = Modifier.padding(bottom = 8.dp, start = 4.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              Box(
+                modifier = Modifier
+                  .size(8.dp)
+                  .background(
+                    if (moment.id == 1) Apricot else Taupe.copy(alpha = 0.3f),
+                    CircleShape
+                  )
+              )
+              Text(
+                text = moment.timeAgo,
+                color = Taupe,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+              )
+            }
+
+            // Photo Card
+            Surface(
+              modifier = Modifier.fillMaxWidth(),
+              shape = RoundedCornerShape(32.dp),
+              border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
+              shadowElevation = 4.dp
+            ) {
+              Box(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .aspectRatio(0.8f) // aspect-[4/5]
+              ) {
+                // Image
+                AsyncImage(
+                  model = moment.imageUrl,
+                  contentDescription = moment.caption,
+                  modifier = Modifier.fillMaxSize(),
+                  contentScale = ContentScale.Crop
+                )
+
+                // Inner Glass-border Overlay
+                Box(
+                  modifier = Modifier
+                    .fillMaxSize()
+                    .border(12.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(32.dp))
+                )
+
+                // Floating Caption at the bottom left-center
+                Box(
+                  modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(16.dp)
+                ) {
+                  Surface(
+                    color = Color.White.copy(alpha = 0.9f),
+                    shape = CircleShape,
+                    shadowElevation = 2.dp,
+                    modifier = Modifier.widthIn(max = 280.dp)
+                  ) {
+                    Text(
+                      text = moment.caption,
+                      color = Cocoa,
+                      fontWeight = FontWeight.Bold,
+                      fontSize = 14.sp,
+                      modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                      maxLines = 1
+                    )
+                  }
+                }
+              }
+            }
+
+            // Reaction Bar & Sender info
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp, start = 4.dp, end = 4.dp),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              // Action Buttons Row
+              Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Favorite heart button
+                IconButton(
+                  onClick = {
+                    onMomentsChange(
+                      moments.map {
+                        if (it.id == moment.id) it.copy(isLiked = !it.isLiked) else it
+                      }
+                    )
+                  },
+                  modifier = Modifier
+                    .size(48.dp)
+                    .background(
+                      if (moment.isLiked) Apricot.copy(alpha = 0.15f) else Color.White,
+                      CircleShape
+                    )
+                    .border(
+                      1.dp,
+                      if (moment.isLiked) Apricot.copy(alpha = 0.3f) else Color.White,
+                      CircleShape
+                    )
+                ) {
+                  Icon(
+                    imageVector = if (moment.isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                    contentDescription = "Favorite",
+                    tint = if (moment.isLiked) Apricot else Cocoa,
+                    modifier = Modifier.size(24.dp)
+                  )
+                }
+
+                // Groups / Diversity Button
+                IconButton(
+                  onClick = {
+                    onMomentsChange(
+                      moments.map {
+                        if (it.id == moment.id) it.copy(isGroupReacted = !it.isGroupReacted) else it
+                      }
+                    )
+                  },
+                  modifier = Modifier
+                    .size(48.dp)
+                    .background(
+                      if (moment.isGroupReacted) Apricot.copy(alpha = 0.15f) else Color.White,
+                      CircleShape
+                    )
+                    .border(
+                      1.dp,
+                      if (moment.isGroupReacted) Apricot.copy(alpha = 0.3f) else Color.White,
+                      CircleShape
+                    )
+                ) {
+                  Icon(
+                    imageVector = Icons.Rounded.Groups,
+                    contentDescription = "Share with Circle",
+                    tint = if (moment.isGroupReacted) Apricot else Cocoa,
+                    modifier = Modifier.size(24.dp)
+                  )
+                }
+
+                // Coffee Cup Button
+                IconButton(
+                  onClick = {
+                    onMomentsChange(
+                      moments.map {
+                        if (it.id == moment.id) it.copy(isCafeReacted = !it.isCafeReacted) else it
+                      }
+                    )
+                  },
+                  modifier = Modifier
+                    .size(48.dp)
+                    .background(
+                      if (moment.isCafeReacted) Apricot.copy(alpha = 0.15f) else Color.White,
+                      CircleShape
+                    )
+                    .border(
+                      1.dp,
+                      if (moment.isCafeReacted) Apricot.copy(alpha = 0.3f) else Color.White,
+                      CircleShape
+                    )
+                ) {
+                  Icon(
+                    imageVector = Icons.Rounded.LocalCafe,
+                    contentDescription = "Virtual Coffee",
+                    tint = if (moment.isCafeReacted) Apricot else Cocoa,
+                    modifier = Modifier.size(24.dp)
+                  )
+                }
+              }
+
+              // Sender Info on right
+              Column(horizontalAlignment = Alignment.End) {
+                Text(
+                  text = moment.senderName,
+                  color = Cocoa,
+                  fontWeight = FontWeight.Bold,
+                  fontSize = 14.sp
+                )
+                Text(
+                  text = moment.senderLocation,
+                  color = Taupe,
+                  fontSize = 12.sp
+                )
+              }
+            }
+          }
+        }
+
+        // Empty State / Sleep indicator (All caught up)
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 32.dp),
+          horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+          Box(
+            modifier = Modifier
+              .size(96.dp)
+              .background(Color(0xFFF4ECE9), CircleShape),
+            contentAlignment = Alignment.Center
+          ) {
+            Icon(
+              imageVector = Icons.Rounded.Bedtime,
+              contentDescription = null,
+              tint = Taupe,
+              modifier = Modifier.size(36.dp)
+            )
+          }
+          Spacer(modifier = Modifier.height(16.dp))
+          Text(
+            text = "All caught up",
+            color = Cocoa,
+            fontWeight = FontWeight.Bold,
+            fontSize = 18.sp
+          )
+          Spacer(modifier = Modifier.height(4.dp))
+          Text(
+            text = "Waiting for new cozy moments...",
+            color = Taupe,
+            fontSize = 14.sp
+          )
+        }
+      }
+    }
+
+    // Overlapping Camera Floating Action Button
+    FloatingActionButton(
+      onClick = { onShowAddMomentDialogChange(true) },
+      containerColor = Apricot,
+      contentColor = Color.White,
+      shape = CircleShape,
+      modifier = Modifier
+        .align(Alignment.BottomEnd)
+        .padding(bottom = 90.dp, end = 24.dp)
+        .size(64.dp)
+    ) {
+      Icon(
+        imageVector = Icons.Rounded.PhotoCamera,
+        contentDescription = "Share Moment",
+        modifier = Modifier.size(32.dp)
+      )
+    }
   }
 }
