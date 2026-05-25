@@ -53,6 +53,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.ui.theme.*
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.providers.builtin.Email
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -123,6 +125,9 @@ fun WelcomeScreen(modifier: Modifier = Modifier, onNavigateToSignUp: () -> Unit 
   var email by remember { mutableStateOf("") }
   var password by remember { mutableStateOf("") }
   var passwordVisible by remember { mutableStateOf(false) }
+  var isLoading by remember { mutableStateOf(false) }
+  var errorMessage by remember { mutableStateOf<String?>(null) }
+  val coroutineScope = rememberCoroutineScope()
 
   Column(
     modifier = modifier
@@ -230,6 +235,11 @@ fun WelcomeScreen(modifier: Modifier = Modifier, onNavigateToSignUp: () -> Unit 
       keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
     )
 
+    if (errorMessage != null) {
+      Spacer(modifier = Modifier.height(8.dp))
+      Text(text = errorMessage!!, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
+    }
+
     Spacer(modifier = Modifier.height(16.dp))
 
     Box(
@@ -248,7 +258,28 @@ fun WelcomeScreen(modifier: Modifier = Modifier, onNavigateToSignUp: () -> Unit 
     Spacer(modifier = Modifier.height(32.dp))
 
     Button(
-      onClick = onSignIn,
+      onClick = {
+        if (email.isBlank() || password.isBlank()) {
+          errorMessage = "Vui lòng nhập email và mật khẩu"
+          return@Button
+        }
+        isLoading = true
+        errorMessage = null
+        coroutineScope.launch {
+          try {
+            supabase.auth.signInWith(Email) {
+              this.email = email
+              this.password = password
+            }
+            isLoading = false
+            onSignIn()
+          } catch (e: Exception) {
+            isLoading = false
+            errorMessage = e.message ?: "Đăng nhập thất bại"
+          }
+        }
+      },
+      enabled = !isLoading,
       colors = ButtonDefaults.buttonColors(containerColor = Apricot),
       shape = CircleShape,
       modifier = Modifier
@@ -289,6 +320,9 @@ fun SignUpScreen(modifier: Modifier = Modifier, onNavigateToSignIn: () -> Unit =
   var email by remember { mutableStateOf("") }
   var password by remember { mutableStateOf("") }
   var passwordVisible by remember { mutableStateOf(false) }
+  var isLoading by remember { mutableStateOf(false) }
+  var errorMessage by remember { mutableStateOf<String?>(null) }
+  val coroutineScope = rememberCoroutineScope()
 
   Box(modifier = modifier.fillMaxSize().background(Cream)) {
     // Blurred background spots
@@ -387,10 +421,36 @@ fun SignUpScreen(modifier: Modifier = Modifier, onNavigateToSignIn: () -> Unit =
         modifier = Modifier.padding(start = 4.dp, top = 8.dp)
       )
 
+      if (errorMessage != null) {
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(text = errorMessage!!, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
+      }
+
       Spacer(modifier = Modifier.height(32.dp))
 
       Button(
-        onClick = onSignUpComplete,
+        onClick = {
+          if (email.isBlank() || password.isBlank()) {
+               errorMessage = "Vui lòng nhập email và mật khẩu hợp lệ"
+               return@Button
+          }
+          isLoading = true
+          errorMessage = null
+          coroutineScope.launch {
+               try {
+                  supabase.auth.signUpWith(Email) {
+                     this.email = email
+                     this.password = password
+                  }
+                  isLoading = false
+                  onSignUpComplete()
+               } catch (e: Exception) {
+                  isLoading = false
+                  errorMessage = e.message ?: "Đăng ký thất bại"
+               }
+          }
+        },
+        enabled = !isLoading,
         colors = ButtonDefaults.buttonColors(containerColor = Sage),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
