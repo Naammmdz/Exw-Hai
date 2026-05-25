@@ -1,4 +1,3 @@
-*.iml
 .gradle
 .kotlin
 /local.properties
@@ -19,3 +18,10 @@ debug.keystore
 *.jks
 *.keystore
 !debug.keystore.base64
+
+# Ignore all .idea files except core project settings
+/.idea/*
+!/.idea/codeStyles
+!/.idea/inspectionProfiles
+!/.idea/vcs.xml
+!/.idea/runConfigurations.xml
