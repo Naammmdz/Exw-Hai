@@ -633,118 +633,327 @@ fun HomeScreen(modifier: Modifier = Modifier) {
 
           Tab.TIMELINE -> {
             // TIMELINE Tab Content
-            Column(
-              modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-            ) {
-              // Header
-              Row(
+            Box(modifier = Modifier.fillMaxSize()) {
+              // Timeline dashed line running down behind the cards
+              Canvas(
                 modifier = Modifier
-                  .fillMaxWidth()
-                  .padding(horizontal = 32.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                  .align(Alignment.TopStart)
+                  .fillMaxHeight()
+                  .width(2.dp)
+                  .padding(start = 44.dp) // Aligns beautifully behind the center of left icon container (24dp screen padding + 20dp card padding)
               ) {
-                Text(
-                  text = "Timeline",
-                  color = Cocoa,
-                  fontSize = 28.sp,
-                  fontWeight = FontWeight.ExtraBold
+                val pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
+                  floatArrayOf(12f, 12f), 0f
                 )
-                Surface(
-                  modifier = Modifier.size(40.dp),
-                  shape = CircleShape,
-                  color = Surface,
-                  shadowElevation = 4.dp
-                ) {
-                  Box(contentAlignment = Alignment.Center, modifier = Modifier.clickable { }) {
-                    Icon(
-                      imageVector = Icons.Rounded.Sort,
-                      contentDescription = "Sort",
-                      tint = Cocoa.copy(alpha = 0.6f),
-                      modifier = Modifier.size(24.dp)
-                    )
-                  }
-                }
+                drawLine(
+                  color = Cocoa,
+                  alpha = 0.12f,
+                  start = Offset(0f, 130.dp.toPx()),
+                  end = Offset(0f, size.height - 110.dp.toPx()),
+                  strokeWidth = 2.dp.toPx(),
+                  pathEffect = pathEffect
+                )
               }
 
-              Spacer(modifier = Modifier.height(8.dp))
-
-              // Feed Content
               Column(
                 modifier = Modifier
-                  .fillMaxWidth()
-                  .padding(horizontal = 24.dp)
+                  .fillMaxSize()
+                  .verticalScroll(rememberScrollState())
               ) {
-                val timelineEvents = remember(checkedIn) {
-                  listOf(
-                    if (checkedIn) {
-                      Triple("You checked in as Safe", "You reassured your circle just now.", "Just now")
-                    } else {
-                      Triple("Heaerth Status Intact", "All signals clear.", "Waiting for safe signal")
-                    },
-                    Triple("Sarah sent a Hug", "\"Thinking of you this morning!\" arrived from Sarah.", "15 mins ago"),
-                    Triple("Jason's Window Opened", "Jason's scheduled check-in window is active.", "45 mins ago"),
-                    Triple("Mia checked in", "Mia marked herself safe.", "1 hour ago"),
-                    Triple("Security Refresh", "Cozy Hearth companion verified backup links.", "Yesterday")
+                // Header
+                Column(
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 32.dp, end = 32.dp, top = 20.dp, bottom = 12.dp)
+                ) {
+                  Text(
+                    text = "Timeline",
+                    color = Cocoa,
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.ExtraBold
+                  )
+                  Spacer(modifier = Modifier.height(4.dp))
+                  Text(
+                    text = "Your cozy history",
+                    color = Taupe,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
                   )
                 }
 
-                timelineEvents.forEachIndexed { index, event ->
-                  Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                  ) {
-                    // Timeline indicator column
-                    Column(
-                      horizontalAlignment = Alignment.CenterHorizontally,
-                      modifier = Modifier.width(24.dp)
-                    ) {
-                      Surface(
-                        modifier = Modifier.size(16.dp),
-                        shape = CircleShape,
-                        color = if (index == 0) Apricot else Sage,
-                        border = BorderStroke(2.dp, Color.White)
-                      ) {}
+                Spacer(modifier = Modifier.height(8.dp))
 
-                      if (index < timelineEvents.size - 1) {
-                        Box(
-                          modifier = Modifier
-                            .width(2.dp)
-                            .height(80.dp)
-                            .background(Cocoa.copy(alpha = 0.1f))
+                // Timeline Feed Items
+                Column(
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 120.dp),
+                  verticalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
+                  // Card 1: Check-in: Everything is okay (9:00 AM)
+                  Surface(
+                    color = Surface,
+                    shape = RoundedCornerShape(24.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.6f)),
+                    shadowElevation = 3.dp,
+                    modifier = Modifier
+                      .fillMaxWidth()
+                      .padding(horizontal = 24.dp)
+                  ) {
+                    Row(
+                      modifier = Modifier.padding(20.dp),
+                      verticalAlignment = Alignment.Top,
+                      horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                      Box(
+                        modifier = Modifier
+                          .size(40.dp)
+                          .background(Sage.copy(alpha = 0.3f), CircleShape),
+                        contentAlignment = Alignment.Center
+                      ) {
+                        Icon(
+                          imageVector = Icons.Rounded.CheckCircle,
+                          contentDescription = null,
+                          tint = Sage,
+                          modifier = Modifier.size(24.dp)
+                        )
+                      }
+
+                      Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                          modifier = Modifier.fillMaxWidth(),
+                          horizontalArrangement = Arrangement.SpaceBetween,
+                          verticalAlignment = Alignment.CenterVertically
+                        ) {
+                          Text(
+                            text = "Check-in: Everything is okay",
+                            color = Cocoa,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 16.sp,
+                            modifier = Modifier.weight(1f),
+                            lineHeight = 20.sp
+                          )
+                          Spacer(modifier = Modifier.width(8.dp))
+                          Text(
+                            text = "9:00 AM",
+                            color = Taupe,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                          )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                          text = "Automatic safety heartbeat sent.",
+                          color = Taupe,
+                          fontSize = 14.sp
                         )
                       }
                     }
+                  }
 
-                    // Content Details
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                      Text(
-                        text = event.first,
-                        color = Cocoa,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 16.sp
-                      )
-                      Text(
-                        text = event.second,
-                        color = Taupe,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                      )
-                      Text(
-                        text = event.third,
-                        color = Taupe.copy(alpha = 0.7f),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                      )
-                      Spacer(modifier = Modifier.height(24.dp))
+                  // Card 2: Sarah viewed your status (10:15 AM)
+                  Surface(
+                    color = Surface,
+                    shape = RoundedCornerShape(24.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.6f)),
+                    shadowElevation = 3.dp,
+                    modifier = Modifier
+                      .fillMaxWidth()
+                      .padding(horizontal = 24.dp)
+                  ) {
+                    Row(
+                      modifier = Modifier.padding(20.dp),
+                      verticalAlignment = Alignment.Top,
+                      horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                      Box(
+                        modifier = Modifier
+                          .size(40.dp)
+                          .clip(CircleShape)
+                          .border(2.dp, Cream, CircleShape)
+                      ) {
+                        AsyncImage(
+                          model = "https://lh3.googleusercontent.com/aida-public/AB6AXuBbpVsjLgO8uGCHakEuiwV-6RFPI2mIH922q9L1T5BD36b5xJrpbsUNc7nyrfTV5ky2pXv0OKkhyUvjZpyT-molKGEUsCy5NpKtk9ZN1ZD3g1hE_XXzRgCy-sQokrnIsF4yivsvFSL0Vk8Wa3OZEeQEhkw4v46oKNrwu4-DVGhZ29L7M4P24fuVmMldi9SZHtqVSMLKjOJzMKxROcz5wwHGXl4zRjw-EQ5k4AAZt9sv3-ovWEsgeVziZ0WFGWzGT4RaE70vr8dJuCj0",
+                          contentDescription = "Sarah",
+                          modifier = Modifier.fillMaxSize(),
+                          contentScale = ContentScale.Crop
+                        )
+                      }
+
+                      Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                          modifier = Modifier.fillMaxWidth(),
+                          horizontalArrangement = Arrangement.SpaceBetween,
+                          verticalAlignment = Alignment.CenterVertically
+                        ) {
+                          Text(
+                            text = "Sarah viewed your status",
+                            color = Cocoa,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 16.sp,
+                            modifier = Modifier.weight(1f),
+                            lineHeight = 20.sp
+                          )
+                          Spacer(modifier = Modifier.width(8.dp))
+                          Text(
+                            text = "10:15 AM",
+                            color = Taupe,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                          )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                          text = "A loved one checked in on you.",
+                          color = Taupe,
+                          fontSize = 14.sp
+                        )
+                      }
+                    }
+                  }
+
+                  // Card 3: Moment Shared (11:30 AM)
+                  Surface(
+                    color = Surface,
+                    shape = RoundedCornerShape(24.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.6f)),
+                    shadowElevation = 3.dp,
+                    modifier = Modifier
+                      .fillMaxWidth()
+                      .padding(horizontal = 24.dp)
+                  ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                      Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                      ) {
+                        Box(
+                          modifier = Modifier
+                            .size(40.dp)
+                            .background(Apricot.copy(alpha = 0.2f), CircleShape),
+                          contentAlignment = Alignment.Center
+                        ) {
+                          Icon(
+                            imageVector = Icons.Rounded.LocalFlorist,
+                            contentDescription = null,
+                            tint = Apricot,
+                            modifier = Modifier.size(24.dp)
+                          )
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                          Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                          ) {
+                            Text(
+                              text = "Moment Shared",
+                              color = Cocoa,
+                              fontWeight = FontWeight.ExtraBold,
+                              fontSize = 16.sp,
+                              modifier = Modifier.weight(1f),
+                              lineHeight = 20.sp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                              text = "11:30 AM",
+                              color = Taupe,
+                              fontSize = 12.sp,
+                              fontWeight = FontWeight.Bold
+                            )
+                          }
+                          Spacer(modifier = Modifier.height(4.dp))
+                          Text(
+                            text = "\"Cozy coffee break ☕️\"",
+                            color = Taupe,
+                            fontSize = 14.sp
+                          )
+                        }
+                      }
+
+                      Spacer(modifier = Modifier.height(16.dp))
+
+                      Box(
+                        modifier = Modifier
+                          .fillMaxWidth()
+                          .height(160.dp)
+                          .clip(RoundedCornerShape(16.dp))
+                          .background(Cream)
+                      ) {
+                        AsyncImage(
+                          model = "https://lh3.googleusercontent.com/aida-public/AB6AXuDZLxH_7TUwOJf6CI792F-92EBaqhvN3pfXUDEi1FcrYmDlB5dDOi5gVRH7WW6KyegX3yo4dM5tWD57kV7SS8th6tD1wEi-zmhxQlLB1HGdGeWipOG78yvEChvZfayMki57tb71zeTZUOjrAeniN3-8UZ3deotl0f66weZ1-SMPvPKK5ZUq19wjzHdK6pPMBvm-sdvRgivEGsdPg_vZWsIiZRVbd0_Zw7TeN0FOyHR2Mtq8WlT2QIhMcoA9HKn2sHCxR_NvICcmSx0Y",
+                          contentDescription = "Coffee Cup",
+                          modifier = Modifier.fillMaxSize(),
+                          contentScale = ContentScale.Crop
+                        )
+                      }
+                    }
+                  }
+
+                  // Card 4: Nightly Check-in (11:00 PM) - Opacity 60%
+                  Surface(
+                    color = Surface.copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(24.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f)),
+                    shadowElevation = 1.dp,
+                    modifier = Modifier
+                      .fillMaxWidth()
+                      .padding(horizontal = 24.dp)
+                  ) {
+                    Row(
+                      modifier = Modifier.padding(20.dp),
+                      verticalAlignment = Alignment.Top,
+                      horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                      Box(
+                        modifier = Modifier
+                          .size(40.dp)
+                          .background(Sky.copy(alpha = 0.2f), CircleShape),
+                        contentAlignment = Alignment.Center
+                      ) {
+                        Icon(
+                          imageVector = Icons.Rounded.NightsStay,
+                          contentDescription = null,
+                          tint = Sky,
+                          modifier = Modifier.size(24.dp)
+                        )
+                      }
+
+                      Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                          modifier = Modifier.fillMaxWidth(),
+                          horizontalArrangement = Arrangement.SpaceBetween,
+                          verticalAlignment = Alignment.CenterVertically
+                        ) {
+                          Text(
+                            text = "Nightly Check-in",
+                            color = Cocoa.copy(alpha = 0.7f),
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 16.sp,
+                            modifier = Modifier.weight(1f),
+                            lineHeight = 20.sp
+                          )
+                          Spacer(modifier = Modifier.width(8.dp))
+                          Text(
+                            text = "11:00 PM",
+                            color = Taupe.copy(alpha = 0.7f),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                          )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                          text = "Sleep mode activated.",
+                          color = Taupe.copy(alpha = 0.7f),
+                          fontSize = 14.sp
+                        )
+                      }
                     }
                   }
                 }
               }
-
-              Spacer(modifier = Modifier.height(100.dp))
             }
           }
         }

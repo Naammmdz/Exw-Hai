@@ -72,7 +72,7 @@ class MainActivity : ComponentActivity() {
                 onNavigateToSignUp = { navController.navigate("signup") },
                 onSignIn = {
                   navController.navigate("home") {
-                    popUpTo(0)
+                    popUpTo("signin") { inclusive = true }
                   }
                 }
               )
@@ -87,7 +87,7 @@ class MainActivity : ComponentActivity() {
               OnboardingPagerScreen(
                 onGetStarted = {
                   navController.navigate("home") {
-                    popUpTo(0)
+                    popUpTo("onboarding") { inclusive = true }
                   }
                 }
               )
