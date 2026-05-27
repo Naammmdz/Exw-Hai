@@ -25,4 +25,6 @@
     <string name="share_moment">Share moment</string>
     <string name="emergency_contacts">Emergency contacts</string>
     <string name="safety_rhythm">Safety rhythm</string>
+    <string name="logout">Log out</string>
+    <string name="language">Tiếng Việt</string>
 </resources>

@@ -25,4 +25,6 @@
     <string name="share_moment">Chia sẻ khoảnh khắc</string>
     <string name="emergency_contacts">Liên hệ khẩn cấp</string>
     <string name="safety_rhythm">Nhịp an toàn</string>
+    <string name="logout">Đăng xuất</string>
+    <string name="language">English</string>
 </resources>
