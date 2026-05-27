@@ -1,7 +1,6 @@
 package com.example
 
 import android.content.Intent
-import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -64,9 +63,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,7 +76,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -108,7 +106,6 @@ import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.Sage
 import com.example.ui.theme.Surface
 import com.example.ui.theme.Taupe
-import java.util.Locale
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -151,6 +148,8 @@ enum class AppLanguage(val tag: String) {
   }
 }
 
+private val LocalAppLanguage = compositionLocalOf { AppLanguage.English }
+
 private fun AppLanguage.next(): AppLanguage = when (this) {
   AppLanguage.English -> AppLanguage.Vietnamese
   AppLanguage.Vietnamese -> AppLanguage.English
@@ -161,8 +160,88 @@ private fun LanguageButton(language: AppLanguage, onClick: () -> Unit) {
   OutlinedButton(onClick = onClick, shape = RoundedCornerShape(8.dp)) {
     Icon(Icons.Rounded.Translate, contentDescription = null, tint = Cocoa, modifier = Modifier.size(18.dp))
     Spacer(Modifier.width(6.dp))
-    Text(stringResource(R.string.language), color = Cocoa, fontWeight = FontWeight.Bold)
+    Text(if (language == AppLanguage.English) "Tiếng Việt" else "English", color = Cocoa, fontWeight = FontWeight.Bold)
   }
+}
+
+@Composable
+private fun esmeryString(id: Int): String {
+  val language = LocalAppLanguage.current
+  if (language == AppLanguage.English) return stringResource(id)
+  return when (id) {
+    R.string.sign_in -> "Đăng nhập"
+    R.string.sign_up -> "Tạo tài khoản"
+    R.string.email -> "Email"
+    R.string.password -> "Mật khẩu"
+    R.string.full_name -> "Họ tên"
+    R.string.forgot_password -> "Quên mật khẩu?"
+    R.string.welcome_title -> "Một bàn tay dịu dàng luôn ở bên"
+    R.string.welcome_subtitle -> "Xác nhận an toàn cho người sống độc lập."
+    R.string.onboarding_one -> "Một bàn tay dịu dàng luôn ở bên"
+    R.string.onboarding_two -> "Xác nhận an toàn thật đơn giản"
+    R.string.onboarding_three -> "Cảm nhận sự ấm áp"
+    R.string.get_started -> "Bắt đầu"
+    R.string.im_safe -> "Tôi an toàn"
+    R.string.circle_notified -> "Vòng thân của bạn đã được thông báo."
+    R.string.hearth -> "Mái ấm"
+    R.string.circle -> "Vòng thân"
+    R.string.timeline -> "Dòng thời gian"
+    R.string.moments -> "Khoảnh khắc"
+    R.string.safety -> "An toàn"
+    R.string.crisis -> "Khẩn cấp"
+    R.string.plans -> "Gói dịch vụ"
+    R.string.add_friend -> "Thêm bạn"
+    R.string.share_moment -> "Chia sẻ khoảnh khắc"
+    R.string.emergency_contacts -> "Liên hệ khẩn cấp"
+    R.string.safety_rhythm -> "Nhịp an toàn"
+    R.string.logout -> "Đăng xuất"
+    else -> stringResource(id)
+  }
+}
+
+@Composable
+private fun t(en: String, vi: String): String = if (LocalAppLanguage.current == AppLanguage.English) en else vi
+
+private fun tr(language: AppLanguage, en: String, vi: String): String = if (language == AppLanguage.English) en else vi
+
+@Composable
+private fun localizedEventText(value: String): String = when (value) {
+  "Check-in confirmed" -> t("Check-in confirmed", "Đã xác nhận an toàn")
+  "Your circle has been notified." -> t("Your circle has been notified.", "Vòng thân của bạn đã được thông báo.")
+  "Circle invitation sent" -> t("Circle invitation sent", "Đã gửi lời mời vào vòng thân")
+  "Circle invitation accepted" -> t("Circle invitation accepted", "Đã chấp nhận lời mời")
+  "Circle invitation declined" -> t("Circle invitation declined", "Đã từ chối lời mời")
+  "Request status updated." -> t("Request status updated.", "Trạng thái lời mời đã được cập nhật.")
+  "Gentle nudge sent" -> t("Gentle nudge sent", "Đã gửi nhắc nhở nhẹ nhàng")
+  "Moment shared" -> t("Moment shared", "Đã chia sẻ khoảnh khắc")
+  "Emergency contact saved" -> t("Emergency contact saved", "Đã lưu liên hệ khẩn cấp")
+  "Safety rhythm updated" -> t("Safety rhythm updated", "Đã cập nhật nhịp an toàn")
+  "Morning check-in" -> t("Morning check-in", "Xác nhận an toàn buổi sáng")
+  "Automatic safety heartbeat sent." -> t("Automatic safety heartbeat sent.", "Tín hiệu an toàn tự động đã được gửi.")
+  "Morning coffee ritual" -> t("Morning coffee ritual", "Thói quen cà phê sáng")
+  else -> value
+}
+
+@Composable
+private fun localizedRelationship(value: String): String = when (value) {
+  "Best friend" -> t("Best friend", "Bạn thân")
+  "Family" -> t("Family", "Gia đình")
+  "Trusted contact" -> t("Trusted contact", "Liên hệ tin cậy")
+  else -> value
+}
+
+@Composable
+private fun localizedRhythmLabel(value: String): String = when (value) {
+  "Wakeup Check" -> t("Wakeup Check", "Xác nhận khi thức dậy")
+  "Bedtime Check" -> t("Bedtime Check", "Xác nhận trước khi ngủ")
+  else -> value
+}
+
+@Composable
+private fun localizedCircleStatus(status: CircleStatus): String = when (status) {
+  CircleStatus.Pending -> t("pending", "đang chờ")
+  CircleStatus.Accepted -> t("accepted", "đã chấp nhận")
+  CircleStatus.Declined -> t("declined", "đã từ chối")
 }
 
 @Composable
@@ -170,19 +249,10 @@ fun EsmeryApp(
   authGateway: AuthGateway = remember { AuthGateway() },
 ) {
   val navController = rememberNavController()
-  val baseContext = LocalContext.current
   var languageTag by rememberSaveable { mutableStateOf(AppLanguage.English.tag) }
   val language = AppLanguage.fromTag(languageTag)
-  val localizedContext = remember(baseContext, languageTag) {
-    val configuration = Configuration(baseContext.resources.configuration)
-    configuration.setLocale(Locale.forLanguageTag(languageTag))
-    baseContext.createConfigurationContext(configuration)
-  }
 
-  CompositionLocalProvider(
-    LocalContext provides localizedContext,
-    LocalConfiguration provides localizedContext.resources.configuration,
-  ) {
+  androidx.compose.runtime.CompositionLocalProvider(LocalAppLanguage provides language) {
     NavHost(navController = navController, startDestination = Routes.SignIn) {
     composable(Routes.SignIn) {
       WelcomeScreen(
@@ -211,17 +281,23 @@ fun EsmeryApp(
     }
     composable(Routes.CircleSetup) {
       SetupScreen(
-        title = "Create My Circle",
-        body = "Add at least one trusted contact now, or continue and do it later.",
-        primary = "Continue",
+        title = t("Create My Circle", "Tạo vòng thân của tôi"),
+        body = t(
+          "Add at least one trusted contact now, or continue and do it later.",
+          "Thêm ít nhất một liên hệ tin cậy ngay bây giờ, hoặc tiếp tục và thêm sau.",
+        ),
+        primary = t("Continue", "Tiếp tục"),
         onPrimary = { navController.navigate(Routes.RhythmSetup) },
       )
     }
     composable(Routes.RhythmSetup) {
       SetupScreen(
-        title = stringResource(R.string.safety_rhythm),
-        body = "Wakeup and bedtime checks are ready. You can edit them from Safety.",
-        primary = stringResource(R.string.get_started),
+        title = esmeryString(R.string.safety_rhythm),
+        body = t(
+          "Wakeup and bedtime checks are ready. You can edit them from Safety.",
+          "Lịch xác nhận khi thức dậy và trước khi ngủ đã sẵn sàng. Bạn có thể chỉnh trong mục An toàn.",
+        ),
+        primary = esmeryString(R.string.get_started),
         onPrimary = {
           navController.navigate(Routes.Home) {
             popUpTo(Routes.SignIn) { inclusive = true }
@@ -255,6 +331,7 @@ fun WelcomeScreen(
   onSignedIn: () -> Unit = {},
 ) {
   AuthScaffold(modifier = modifier) {
+    val isEnglish = LocalAppLanguage.current == AppLanguage.English
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
@@ -265,34 +342,34 @@ fun WelcomeScreen(
       LanguageButton(language = language, onClick = onToggleLanguage)
     }
     BrandHeader(
-      title = stringResource(R.string.welcome_title),
-      subtitle = stringResource(R.string.welcome_subtitle),
+      title = esmeryString(R.string.welcome_title),
+      subtitle = esmeryString(R.string.welcome_subtitle),
     )
-    EsmeryTextField(value = email, onValueChange = { email = it }, label = stringResource(R.string.email), keyboardType = KeyboardType.Email)
-    EsmeryTextField(value = password, onValueChange = { password = it }, label = stringResource(R.string.password), keyboardType = KeyboardType.Password, password = true)
-    TextButton(onClick = { message = "Password reset email is a v1 stub." }, modifier = Modifier.align(Alignment.End)) {
-      Text(stringResource(R.string.forgot_password), color = Cocoa)
+    EsmeryTextField(value = email, onValueChange = { email = it }, label = esmeryString(R.string.email), keyboardType = KeyboardType.Email)
+    EsmeryTextField(value = password, onValueChange = { password = it }, label = esmeryString(R.string.password), keyboardType = KeyboardType.Password, password = true)
+    TextButton(onClick = { message = if (isEnglish) "Password reset email is a v1 stub." else "Email đặt lại mật khẩu là mô phỏng ở bản v1." }, modifier = Modifier.align(Alignment.End)) {
+      Text(esmeryString(R.string.forgot_password), color = Cocoa)
     }
     message?.let { InlineMessage(it) }
     PrimaryButton(
-      text = stringResource(R.string.sign_in),
+      text = esmeryString(R.string.sign_in),
       loading = isLoading,
       onClick = {
         if (email.isBlank() || password.isBlank()) {
-          message = "Enter email and password."
+          message = if (isEnglish) "Enter email and password." else "Nhập email và mật khẩu."
           return@PrimaryButton
         }
         isLoading = true
         scope.launch {
           runCatching { authGateway.signIn(email.trim(), password) }
             .onSuccess { onSignedIn() }
-            .onFailure { message = it.message ?: "Sign in failed." }
+            .onFailure { message = it.message ?: if (isEnglish) "Sign in failed." else "Đăng nhập thất bại." }
           isLoading = false
         }
       },
     )
     TextButton(onClick = onNavigateToSignUp, modifier = Modifier.fillMaxWidth()) {
-      Text("New here? Create an account", color = Cocoa, fontWeight = FontWeight.Bold)
+      Text(t("New here? Create an account", "Bạn mới ở đây? Tạo tài khoản"), color = Cocoa, fontWeight = FontWeight.Bold)
     }
   }
 }
@@ -306,6 +383,7 @@ fun SignUpScreen(
   onSignedUp: () -> Unit = {},
 ) {
   AuthScaffold {
+    val isEnglish = LocalAppLanguage.current == AppLanguage.English
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -319,24 +397,31 @@ fun SignUpScreen(
       }
       LanguageButton(language = language, onClick = onToggleLanguage)
     }
-    BrandHeader(title = "Start Your Journey", subtitle = "Set up a private safety circle with ESMERY.")
-    EsmeryTextField(value = name, onValueChange = { name = it }, label = stringResource(R.string.full_name))
-    EsmeryTextField(value = email, onValueChange = { email = it }, label = stringResource(R.string.email), keyboardType = KeyboardType.Email)
-    EsmeryTextField(value = password, onValueChange = { password = it }, label = stringResource(R.string.password), keyboardType = KeyboardType.Password, password = true)
+    BrandHeader(
+      title = t("Start Your Journey", "Bắt đầu hành trình của bạn"),
+      subtitle = t("Set up a private safety circle with ESMERY.", "Thiết lập vòng thân an toàn riêng tư cùng ESMERY."),
+    )
+    EsmeryTextField(value = name, onValueChange = { name = it }, label = esmeryString(R.string.full_name))
+    EsmeryTextField(value = email, onValueChange = { email = it }, label = esmeryString(R.string.email), keyboardType = KeyboardType.Email)
+    EsmeryTextField(value = password, onValueChange = { password = it }, label = esmeryString(R.string.password), keyboardType = KeyboardType.Password, password = true)
     message?.let { InlineMessage(it) }
     PrimaryButton(
-      text = stringResource(R.string.sign_up),
+      text = esmeryString(R.string.sign_up),
       loading = isLoading,
       onClick = {
         if (name.isBlank() || email.isBlank() || password.length < 6) {
-          message = "Enter your name, email, and a password with at least 6 characters."
+          message = if (isEnglish) {
+            "Enter your name, email, and a password with at least 6 characters."
+          } else {
+            "Nhập họ tên, email và mật khẩu có ít nhất 6 ký tự."
+          }
           return@PrimaryButton
         }
         isLoading = true
         scope.launch {
           runCatching { authGateway.signUp(name.trim(), email.trim(), password) }
             .onSuccess { onSignedUp() }
-            .onFailure { message = it.message ?: "Sign up failed." }
+            .onFailure { message = it.message ?: if (isEnglish) "Sign up failed." else "Đăng ký thất bại." }
           isLoading = false
         }
       },
@@ -373,9 +458,9 @@ private fun BrandHeader(title: String, subtitle: String) {
 @Composable
 fun OnboardingPagerScreen(onDone: () -> Unit = {}) {
   val pages = listOf(
-    stringResource(R.string.onboarding_one) to "Stay connected without feeling watched.",
-    stringResource(R.string.onboarding_two) to "Tap once to tell your trusted people you are safe.",
-    stringResource(R.string.onboarding_three) to "Share gentle moments, nudges, and calm safety signals.",
+    esmeryString(R.string.onboarding_one) to t("Stay connected without feeling watched.", "Giữ kết nối mà không có cảm giác bị theo dõi."),
+    esmeryString(R.string.onboarding_two) to t("Tap once to tell your trusted people you are safe.", "Chạm một lần để báo cho người tin cậy rằng bạn vẫn an toàn."),
+    esmeryString(R.string.onboarding_three) to t("Share gentle moments, nudges, and calm safety signals.", "Chia sẻ khoảnh khắc, nhắc nhở nhẹ nhàng và tín hiệu an toàn bình yên."),
   )
   var page by remember { mutableStateOf(0) }
 
@@ -409,7 +494,7 @@ fun OnboardingPagerScreen(onDone: () -> Unit = {}) {
         )
       }
     }
-    PrimaryButton(text = if (page == pages.lastIndex) stringResource(R.string.get_started) else "Next") {
+    PrimaryButton(text = if (page == pages.lastIndex) esmeryString(R.string.get_started) else t("Next", "Tiếp theo")) {
       if (page == pages.lastIndex) onDone() else page += 1
     }
   }
@@ -447,6 +532,7 @@ fun HomeScreen(
   var selectedTab by remember { mutableStateOf(MainTab.Hearth) }
   val scope = rememberCoroutineScope()
   var toast by remember { mutableStateOf<String?>(null) }
+  val circleNotifiedToast = t("Your circle has been notified.", "Vòng thân của bạn đã được thông báo.")
 
   LaunchedEffect(toast) {
     if (toast != null) {
@@ -477,7 +563,7 @@ fun HomeScreen(
         MainTab.Hearth -> HearthScreen(state, onCheckIn = {
           scope.launch {
             repository.checkIn()
-            toast = "Your circle has been notified."
+            toast = circleNotifiedToast
           }
         }, language = language, onToggleLanguage = onToggleLanguage, onLogout = {
           scope.launch {
@@ -518,7 +604,7 @@ private fun TabButton(tab: MainTab, selected: Boolean, onClick: () -> Unit) {
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {
     Icon(tab.icon, contentDescription = null, tint = if (selected) Apricot else Taupe, modifier = Modifier.size(24.dp))
-    Text(stringResource(tab.labelRes), color = if (selected) Cocoa else Taupe, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center)
+    Text(esmeryString(tab.labelRes), color = if (selected) Cocoa else Taupe, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center)
   }
 }
 
@@ -530,7 +616,10 @@ private fun HearthScreen(
   onToggleLanguage: () -> Unit,
   onLogout: () -> Unit,
 ) {
-  ScreenList(title = "Good morning, ${state.profile.displayName}", subtitle = "Last check-in: ${friendlyTime(state.profile.lastSafeAt)}") {
+  ScreenList(
+    title = t("Good morning, ${state.profile.displayName}", "Chào buổi sáng, ${state.profile.displayName}"),
+    subtitle = t("Last check-in: ${friendlyTimeText(state.profile.lastSafeAt)}", "Lần xác nhận gần nhất: ${friendlyTimeText(state.profile.lastSafeAt)}"),
+  ) {
     item {
       Row(
         modifier = Modifier.fillMaxWidth(),
@@ -541,7 +630,7 @@ private fun HearthScreen(
         OutlinedButton(onClick = onLogout, shape = RoundedCornerShape(8.dp)) {
           Icon(Icons.AutoMirrored.Rounded.Logout, contentDescription = null, tint = Cocoa, modifier = Modifier.size(18.dp))
           Spacer(Modifier.width(6.dp))
-          Text(stringResource(R.string.logout), color = Cocoa, fontWeight = FontWeight.Bold)
+          Text(esmeryString(R.string.logout), color = Cocoa, fontWeight = FontWeight.Bold)
         }
       }
     }
@@ -555,16 +644,21 @@ private fun HearthScreen(
         ) {
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Rounded.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(54.dp))
-            Text(stringResource(R.string.im_safe), color = Color.White, fontWeight = FontWeight.Black)
+            Text(esmeryString(R.string.im_safe), color = Color.White, fontWeight = FontWeight.Black)
           }
         }
       }
     }
     item {
-      InfoCard(icon = Icons.Rounded.NotificationsActive, title = "Safety signal ready", body = stringResource(R.string.circle_notified))
+      InfoCard(icon = Icons.Rounded.NotificationsActive, title = t("Safety signal ready", "Tín hiệu an toàn đã sẵn sàng"), body = esmeryString(R.string.circle_notified))
     }
     item {
-      InfoCard(icon = Icons.Rounded.Group, title = "Circle health", body = "${state.circleMembers.count { it.status == CircleStatus.Accepted }} trusted people connected.")
+      val count = state.circleMembers.count { it.status == CircleStatus.Accepted }
+      InfoCard(
+        icon = Icons.Rounded.Group,
+        title = t("Circle health", "Tình trạng vòng thân"),
+        body = t("$count trusted people connected.", "$count người tin cậy đang kết nối."),
+      )
     }
   }
 }
@@ -573,21 +667,25 @@ private fun HearthScreen(
 private fun CircleScreen(state: EsmeryState, repository: com.example.data.EsmeryRepository, onToast: (String) -> Unit) {
   var showAdd by remember { mutableStateOf(false) }
   val scope = rememberCoroutineScope()
+  val language = LocalAppLanguage.current
+  val acceptedMessage = t("Friend request accepted.", "Đã chấp nhận lời mời.")
+  val declinedMessage = t("Friend request declined.", "Đã từ chối lời mời.")
+  val invitationSentMessage = t("Invitation sent.", "Đã gửi lời mời.")
 
-  ScreenList(title = stringResource(R.string.circle), subtitle = "Trusted people who can receive safety alerts.") {
+  ScreenList(title = esmeryString(R.string.circle), subtitle = t("Trusted people who can receive safety alerts.", "Những người tin cậy có thể nhận cảnh báo an toàn.")) {
     item {
-      PrimaryButton(text = stringResource(R.string.add_friend), icon = Icons.Rounded.Add) { showAdd = true }
+      PrimaryButton(text = esmeryString(R.string.add_friend), icon = Icons.Rounded.Add) { showAdd = true }
     }
     items(state.friendRequests) { request ->
       FriendRequestCard(request = request, onAccept = {
         scope.launch {
           repository.updateFriendRequest(request.id, CircleStatus.Accepted)
-          onToast("Friend request accepted.")
+          onToast(acceptedMessage)
         }
       }, onDecline = {
         scope.launch {
           repository.updateFriendRequest(request.id, CircleStatus.Declined)
-          onToast("Friend request declined.")
+          onToast(declinedMessage)
         }
       })
     }
@@ -595,7 +693,7 @@ private fun CircleScreen(state: EsmeryState, repository: com.example.data.Esmery
       CircleMemberCard(member, onNudge = {
         scope.launch {
           repository.sendNudge(member.id)
-          onToast("Gentle nudge sent to ${member.name}.")
+          onToast(tr(language, "Gentle nudge sent to ${member.name}.", "Đã gửi nhắc nhở nhẹ nhàng cho ${member.name}."))
         }
       })
     }
@@ -606,7 +704,7 @@ private fun CircleScreen(state: EsmeryState, repository: com.example.data.Esmery
       scope.launch {
         repository.addFriendRequest(contact, name, relationship)
         showAdd = false
-        onToast("Invitation sent.")
+        onToast(invitationSentMessage)
       }
     })
   }
@@ -616,10 +714,15 @@ private fun CircleScreen(state: EsmeryState, repository: com.example.data.Esmery
 private fun MomentsScreen(moments: List<Moment>, repository: com.example.data.EsmeryRepository, onToast: (String) -> Unit) {
   var showAdd by remember { mutableStateOf(false) }
   val scope = rememberCoroutineScope()
-  ScreenList(title = stringResource(R.string.moments), subtitle = "Small updates for the people who care.") {
-    item { PrimaryButton(text = stringResource(R.string.share_moment), icon = Icons.Rounded.Add) { showAdd = true } }
+  val sharedMessage = t("Moment shared.", "Đã chia sẻ khoảnh khắc.")
+  ScreenList(title = esmeryString(R.string.moments), subtitle = t("Small updates for the people who care.", "Những cập nhật nhỏ dành cho người quan tâm bạn.")) {
+    item { PrimaryButton(text = esmeryString(R.string.share_moment), icon = Icons.Rounded.Add) { showAdd = true } }
     items(moments) { moment ->
-      InfoCard(icon = Icons.Rounded.LocalFlorist, title = moment.caption, body = "Shared to circle - ${friendlyTime(moment.createdAt)}")
+      InfoCard(
+        icon = Icons.Rounded.LocalFlorist,
+        title = localizedEventText(moment.caption),
+        body = t("Shared to circle - ${friendlyTimeText(moment.createdAt)}", "Đã chia sẻ với vòng thân - ${friendlyTimeText(moment.createdAt)}"),
+      )
     }
   }
   if (showAdd) {
@@ -627,7 +730,7 @@ private fun MomentsScreen(moments: List<Moment>, repository: com.example.data.Es
       scope.launch {
         repository.shareMoment(caption, image)
         showAdd = false
-        onToast("Moment shared.")
+        onToast(sharedMessage)
       }
     })
   }
@@ -635,9 +738,13 @@ private fun MomentsScreen(moments: List<Moment>, repository: com.example.data.Es
 
 @Composable
 private fun TimelineScreen(events: List<TimelineEvent>) {
-  ScreenList(title = stringResource(R.string.timeline), subtitle = "Your safety history.") {
+  ScreenList(title = esmeryString(R.string.timeline), subtitle = t("Your safety history.", "Lịch sử an toàn của bạn.")) {
     items(events) { event ->
-      InfoCard(icon = event.type.icon(), title = event.title, body = "${event.body} - ${friendlyTime(event.createdAt)}")
+      InfoCard(
+        icon = event.type.icon(),
+        title = localizedEventText(event.title),
+        body = "${localizedEventText(event.body)} - ${friendlyTimeText(event.createdAt)}",
+      )
     }
   }
 }
@@ -647,27 +754,41 @@ private fun SafetyScreen(state: EsmeryState, repository: com.example.data.Esmery
   var label by remember { mutableStateOf("") }
   var time by remember { mutableStateOf("") }
   val scope = rememberCoroutineScope()
-  ScreenList(title = stringResource(R.string.safety_rhythm), subtitle = "Reminder and inactivity settings are stored as v1 stubs.") {
+  val savedMessage = t("Safety rhythm saved.", "Đã lưu nhịp an toàn.")
+  ScreenList(title = esmeryString(R.string.safety_rhythm), subtitle = t("Reminder and inactivity settings are stored as v1 stubs.", "Cài đặt nhắc nhở và phát hiện không hoạt động đang được lưu mô phỏng ở bản v1.")) {
     item {
       CardBlock {
-        EsmeryTextField(value = label, onValueChange = { label = it }, label = "Check label")
-        EsmeryTextField(value = time, onValueChange = { time = it }, label = "Time, e.g. 18:00")
-        PrimaryButton(text = "Save rhythm") {
+        EsmeryTextField(value = label, onValueChange = { label = it }, label = t("Check label", "Tên lịch xác nhận"))
+        EsmeryTextField(value = time, onValueChange = { time = it }, label = t("Time, e.g. 18:00", "Thời gian, ví dụ 18:00"))
+        PrimaryButton(text = t("Save rhythm", "Lưu nhịp an toàn")) {
           if (label.isNotBlank() && time.isNotBlank()) {
             scope.launch {
               repository.saveSafetyRhythm(SafetyRhythm(id = "", userId = state.profile.id, label = label, checkTime = time))
               label = ""
               time = ""
-              onToast("Safety rhythm saved.")
+              onToast(savedMessage)
             }
           }
         }
       }
     }
     items(state.safetyRhythms) { rhythm ->
-      InfoCard(icon = Icons.Rounded.Schedule, title = rhythm.label, body = "${rhythm.checkTime} - ${if (rhythm.isEnabled) "enabled" else "paused"}")
+      InfoCard(
+        icon = Icons.Rounded.Schedule,
+        title = localizedRhythmLabel(rhythm.label),
+        body = "${rhythm.checkTime} - ${if (rhythm.isEnabled) t("enabled", "đang bật") else t("paused", "đang tạm dừng")}",
+      )
     }
-    item { InfoCard(icon = Icons.Rounded.Warning, title = "Escalation delay", body = "Stored setting stub: alert emergency contacts after missed check-ins.") }
+    item {
+      InfoCard(
+        icon = Icons.Rounded.Warning,
+        title = t("Escalation delay", "Thời gian chờ trước cảnh báo"),
+        body = t(
+          "Stored setting stub: alert emergency contacts after missed check-ins.",
+          "Cài đặt mô phỏng: cảnh báo liên hệ khẩn cấp sau khi bỏ lỡ xác nhận an toàn.",
+        ),
+      )
+    }
   }
 }
 
@@ -676,22 +797,41 @@ private fun CrisisScreen(state: EsmeryState, repository: com.example.data.Esmery
   var showAdd by remember { mutableStateOf(false) }
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
-  ScreenList(title = stringResource(R.string.crisis), subtitle = "Fast access to contacts and safe steps.") {
-    item { PrimaryButton(text = "Add emergency contact", icon = Icons.Rounded.Add) { showAdd = true } }
-    item { InfoCard(icon = Icons.Rounded.Security, title = "My Safe Steps", body = "Pause, move to a safer place, call a trusted contact, then contact local services if needed.") }
-    item { InfoCard(icon = Icons.Rounded.Warning, title = "Local support", body = "Nearby police stations and hospitals are placeholders in v1.") }
+  val language = LocalAppLanguage.current
+  val unavailableMessage = t("Contact action is unavailable on this device.", "Thiết bị này không mở được thao tác liên hệ.")
+  val savedMessage = t("Emergency contact saved.", "Đã lưu liên hệ khẩn cấp.")
+  ScreenList(title = esmeryString(R.string.crisis), subtitle = t("Fast access to contacts and safe steps.", "Truy cập nhanh liên hệ và các bước an toàn.")) {
+    item { PrimaryButton(text = t("Add emergency contact", "Thêm liên hệ khẩn cấp"), icon = Icons.Rounded.Add) { showAdd = true } }
+    item {
+      InfoCard(
+        icon = Icons.Rounded.Security,
+        title = t("My Safe Steps", "Các bước an toàn của tôi"),
+        body = t(
+          "Pause, move to a safer place, call a trusted contact, then contact local services if needed.",
+          "Dừng lại, di chuyển đến nơi an toàn hơn, gọi người tin cậy, rồi liên hệ dịch vụ địa phương nếu cần.",
+        ),
+      )
+    }
+    item {
+      InfoCard(
+        icon = Icons.Rounded.Warning,
+        title = t("Local support", "Hỗ trợ địa phương"),
+        body = t("Nearby police stations and hospitals are placeholders in v1.", "Đồn công an và bệnh viện gần đây là dữ liệu mô phỏng ở bản v1."),
+      )
+    }
     items(state.emergencyContacts) { contact ->
       CardBlock {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
           Icon(Icons.Rounded.Phone, contentDescription = null, tint = Apricot)
           Column(modifier = Modifier.weight(1f)) {
             Text(contact.name, fontWeight = FontWeight.Bold, color = Cocoa)
-            Text("${contact.contact} - verified: ${contact.isVerified}", color = Taupe)
+            val verified = tr(language, if (contact.isVerified) "yes" else "no", if (contact.isVerified) "có" else "không")
+            Text("${contact.contact} - ${tr(language, "verified", "đã xác minh")}: $verified", color = Taupe)
           }
           IconButton(onClick = {
             runCatching {
               context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${contact.contact}")))
-            }.onFailure { onToast("Contact action is unavailable on this device.") }
+            }.onFailure { onToast(unavailableMessage) }
           }) {
             Icon(Icons.Rounded.Call, contentDescription = null, tint = Cocoa)
           }
@@ -704,7 +844,7 @@ private fun CrisisScreen(state: EsmeryState, repository: com.example.data.Esmery
       scope.launch {
         repository.saveEmergencyContact(EmergencyContact(id = "", userId = state.profile.id, name = name, contact = contact))
         showAdd = false
-        onToast("Emergency contact saved.")
+        onToast(savedMessage)
       }
     })
   }
@@ -713,20 +853,35 @@ private fun CrisisScreen(state: EsmeryState, repository: com.example.data.Esmery
 @Composable
 private fun PlansScreen(state: EsmeryState, repository: com.example.data.EsmeryRepository, onToast: (String) -> Unit) {
   val scope = rememberCoroutineScope()
-  ScreenList(title = stringResource(R.string.plans), subtitle = "Checkout is a functional stub in v1.") {
+  val basicSelected = t("Basic Care selected.", "Đã chọn gói Chăm sóc cơ bản.")
+  val monthlySelected = t("Monthly plan selected.", "Đã chọn gói tháng.")
+  val yearlySelected = t("Yearly plan selected.", "Đã chọn gói năm.")
+  ScreenList(title = esmeryString(R.string.plans), subtitle = t("Checkout is a functional stub in v1.", "Thanh toán đang được mô phỏng ở bản v1.")) {
     item {
-      PlanCard("Basic Care", "Free - manual daily check-in, 1 family notification.", state.subscriptionStatus.plan == SubscriptionPlan.Basic) {
-        scope.launch { repository.updateSubscription(SubscriptionPlan.Basic); onToast("Basic Care selected.") }
+      PlanCard(
+        t("Basic Care", "Chăm sóc cơ bản"),
+        t("Free - manual daily check-in, 1 family notification.", "Miễn phí - check-in thủ công hằng ngày, thông báo cho 1 người thân."),
+        state.subscriptionStatus.plan == SubscriptionPlan.Basic,
+      ) {
+        scope.launch { repository.updateSubscription(SubscriptionPlan.Basic); onToast(basicSelected) }
       }
     }
     item {
-      PlanCard("Advanced Monthly", "49,000 VND/month - smart inactivity detection and unlimited contacts.", state.subscriptionStatus.plan == SubscriptionPlan.Monthly) {
-        scope.launch { repository.updateSubscription(SubscriptionPlan.Monthly); onToast("Monthly plan selected.") }
+      PlanCard(
+        t("Advanced Monthly", "Nâng cao theo tháng"),
+        t("49,000 VND/month - smart inactivity detection and unlimited contacts.", "49.000 VND/tháng - phát hiện không hoạt động thông minh và không giới hạn liên hệ."),
+        state.subscriptionStatus.plan == SubscriptionPlan.Monthly,
+      ) {
+        scope.launch { repository.updateSubscription(SubscriptionPlan.Monthly); onToast(monthlySelected) }
       }
     }
     item {
-      PlanCard("Advanced Yearly", "499,000 VND/year - monthly features plus priority support.", state.subscriptionStatus.plan == SubscriptionPlan.Yearly) {
-        scope.launch { repository.updateSubscription(SubscriptionPlan.Yearly); onToast("Yearly plan selected.") }
+      PlanCard(
+        t("Advanced Yearly", "Nâng cao theo năm"),
+        t("499,000 VND/year - monthly features plus priority support.", "499.000 VND/năm - gồm tính năng gói tháng và hỗ trợ ưu tiên."),
+        state.subscriptionStatus.plan == SubscriptionPlan.Yearly,
+      ) {
+        scope.launch { repository.updateSubscription(SubscriptionPlan.Yearly); onToast(yearlySelected) }
       }
     }
   }
@@ -742,7 +897,7 @@ private fun PlanCard(title: String, body: String, selected: Boolean, onSelect: (
         Text(body, color = Taupe)
       }
       Button(onClick = onSelect, colors = ButtonDefaults.buttonColors(containerColor = if (selected) Sage else Apricot)) {
-        Text(if (selected) "Active" else "Choose", color = if (selected) Cocoa else Color.White)
+        Text(if (selected) t("Active", "Đang dùng") else t("Choose", "Chọn"), color = if (selected) Cocoa else Color.White)
       }
     }
   }
@@ -757,10 +912,10 @@ private fun CircleMemberCard(member: CircleMember, onNudge: () -> Unit) {
       }
       Column(modifier = Modifier.weight(1f)) {
         Text(member.name, color = Cocoa, fontWeight = FontWeight.Bold)
-        Text("${member.relationship} - ${member.status.name.lowercase()} - ${friendlyTime(member.lastSafeAt)}", color = Taupe)
+        Text("${localizedRelationship(member.relationship)} - ${localizedCircleStatus(member.status)} - ${friendlyTimeText(member.lastSafeAt)}", color = Taupe)
       }
       OutlinedButton(onClick = onNudge, shape = RoundedCornerShape(8.dp)) {
-        Text("Nudge", color = Cocoa)
+        Text(t("Nudge", "Nhắc nhẹ"), color = Cocoa)
       }
     }
   }
@@ -772,7 +927,7 @@ private fun FriendRequestCard(request: FriendRequest, onAccept: () -> Unit, onDe
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
       Icon(Icons.Rounded.Group, contentDescription = null, tint = Apricot)
       Column(modifier = Modifier.weight(1f)) {
-        Text("Pending request", color = Cocoa, fontWeight = FontWeight.Bold)
+        Text(t("Pending request", "Lời mời đang chờ"), color = Cocoa, fontWeight = FontWeight.Bold)
         Text(request.receiverContact, color = Taupe)
       }
       IconButton(onClick = onAccept) { Icon(Icons.Rounded.Check, contentDescription = null, tint = Cocoa) }
@@ -788,16 +943,16 @@ private fun AddFriendDialog(onDismiss: () -> Unit, onAdd: (String, String, Strin
   var relationship by remember { mutableStateOf("") }
   AlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text(stringResource(R.string.add_friend), color = Cocoa, fontWeight = FontWeight.Black) },
+    title = { Text(esmeryString(R.string.add_friend), color = Cocoa, fontWeight = FontWeight.Black) },
     text = {
       Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        EsmeryTextField(contact, { contact = it }, "Email, phone, or ID")
-        EsmeryTextField(name, { name = it }, "Name")
-        EsmeryTextField(relationship, { relationship = it }, "Relationship")
+        EsmeryTextField(contact, { contact = it }, t("Email, phone, or ID", "Email, số điện thoại hoặc ID"))
+        EsmeryTextField(name, { name = it }, t("Name", "Tên"))
+        EsmeryTextField(relationship, { relationship = it }, t("Relationship", "Mối quan hệ"))
       }
     },
-    confirmButton = { Button(onClick = { if (contact.isNotBlank()) onAdd(contact, name, relationship) }) { Text("Send") } },
-    dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    confirmButton = { Button(onClick = { if (contact.isNotBlank()) onAdd(contact, name, relationship) }) { Text(t("Send", "Gửi")) } },
+    dismissButton = { TextButton(onClick = onDismiss) { Text(t("Cancel", "Hủy")) } },
   )
 }
 
@@ -807,19 +962,19 @@ private fun MomentDialog(onDismiss: () -> Unit, onShare: (String, String) -> Uni
   var image by remember { mutableStateOf(PRESET_IMAGES.first()) }
   AlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text(stringResource(R.string.share_moment), color = Cocoa, fontWeight = FontWeight.Black) },
+    title = { Text(esmeryString(R.string.share_moment), color = Cocoa, fontWeight = FontWeight.Black) },
     text = {
       Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        EsmeryTextField(caption, { caption = it }, "Caption")
+        EsmeryTextField(caption, { caption = it }, t("Caption", "Chú thích"))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
           PRESET_IMAGES.forEachIndexed { index, url ->
-            FilterChip(selected = image == url, onClick = { image = url }, label = { Text("Image ${index + 1}") })
+            FilterChip(selected = image == url, onClick = { image = url }, label = { Text(t("Image ${index + 1}", "Ảnh ${index + 1}")) })
           }
         }
       }
     },
-    confirmButton = { Button(onClick = { if (caption.isNotBlank()) onShare(caption, image) }) { Text("Share") } },
-    dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    confirmButton = { Button(onClick = { if (caption.isNotBlank()) onShare(caption, image) }) { Text(t("Share", "Chia sẻ")) } },
+    dismissButton = { TextButton(onClick = onDismiss) { Text(t("Cancel", "Hủy")) } },
   )
 }
 
@@ -829,15 +984,15 @@ private fun EmergencyContactDialog(onDismiss: () -> Unit, onSave: (String, Strin
   var contact by remember { mutableStateOf("") }
   AlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text("Emergency contact", color = Cocoa, fontWeight = FontWeight.Black) },
+    title = { Text(t("Emergency contact", "Liên hệ khẩn cấp"), color = Cocoa, fontWeight = FontWeight.Black) },
     text = {
       Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        EsmeryTextField(name, { name = it }, "Name")
-        EsmeryTextField(contact, { contact = it }, "Phone or email")
+        EsmeryTextField(name, { name = it }, t("Name", "Tên"))
+        EsmeryTextField(contact, { contact = it }, t("Phone or email", "Số điện thoại hoặc email"))
       }
     },
-    confirmButton = { Button(onClick = { if (name.isNotBlank() && contact.isNotBlank()) onSave(name, contact) }) { Text("Save") } },
-    dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    confirmButton = { Button(onClick = { if (name.isNotBlank() && contact.isNotBlank()) onSave(name, contact) }) { Text(t("Save", "Lưu")) } },
+    dismissButton = { TextButton(onClick = onDismiss) { Text(t("Cancel", "Hủy")) } },
   )
 }
 
@@ -940,8 +1095,9 @@ private fun InlineMessage(text: String) {
   }
 }
 
-private fun friendlyTime(value: String?): String {
-  if (value.isNullOrBlank()) return "not yet"
+@Composable
+private fun friendlyTimeText(value: String?): String {
+  if (value.isNullOrBlank()) return t("not yet", "chưa có")
   return value.substringAfter('T', value).take(5).ifBlank { value }
 }
 
