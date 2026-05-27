@@ -1,3 +1,28 @@
 <resources>
-    <string name="app_name">Sanctuary</string>
+    <string name="app_name">ESMERY</string>
+    <string name="sign_in">Sign In</string>
+    <string name="sign_up">Create Account</string>
+    <string name="email">Email</string>
+    <string name="password">Password</string>
+    <string name="full_name">Full name</string>
+    <string name="forgot_password">Forgot password?</string>
+    <string name="welcome_title">A Gentle Hand on Your Shoulder</string>
+    <string name="welcome_subtitle">Safety check-ins for people living independently.</string>
+    <string name="onboarding_one">A Gentle Hand on Your Shoulder</string>
+    <string name="onboarding_two">Simple Check-ins</string>
+    <string name="onboarding_three">Feel the Warmth</string>
+    <string name="get_started">Get started</string>
+    <string name="im_safe">I’m Safe</string>
+    <string name="circle_notified">Your circle has been notified.</string>
+    <string name="hearth">Hearth</string>
+    <string name="circle">Circle</string>
+    <string name="timeline">Timeline</string>
+    <string name="moments">Moments</string>
+    <string name="safety">Safety</string>
+    <string name="crisis">Crisis</string>
+    <string name="plans">Plans</string>
+    <string name="add_friend">Add friend</string>
+    <string name="share_moment">Share moment</string>
+    <string name="emergency_contacts">Emergency contacts</string>
+    <string name="safety_rhythm">Safety rhythm</string>
 </resources>

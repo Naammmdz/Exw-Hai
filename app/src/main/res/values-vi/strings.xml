@@ -1,0 +1,28 @@
+<resources>
+    <string name="app_name">ESMERY</string>
+    <string name="sign_in">Đăng nhập</string>
+    <string name="sign_up">Tạo tài khoản</string>
+    <string name="email">Email</string>
+    <string name="password">Mật khẩu</string>
+    <string name="full_name">Họ tên</string>
+    <string name="forgot_password">Quên mật khẩu?</string>
+    <string name="welcome_title">Một bàn tay dịu dàng luôn ở bên</string>
+    <string name="welcome_subtitle">Check-in an toàn cho người sống độc lập.</string>
+    <string name="onboarding_one">Một bàn tay dịu dàng luôn ở bên</string>
+    <string name="onboarding_two">Check-in thật đơn giản</string>
+    <string name="onboarding_three">Cảm nhận sự ấm áp</string>
+    <string name="get_started">Bắt đầu</string>
+    <string name="im_safe">Tôi an toàn</string>
+    <string name="circle_notified">Circle của bạn đã được thông báo.</string>
+    <string name="hearth">Hearth</string>
+    <string name="circle">Circle</string>
+    <string name="timeline">Dòng thời gian</string>
+    <string name="moments">Khoảnh khắc</string>
+    <string name="safety">An toàn</string>
+    <string name="crisis">Khẩn cấp</string>
+    <string name="plans">Gói dịch vụ</string>
+    <string name="add_friend">Thêm bạn</string>
+    <string name="share_moment">Chia sẻ khoảnh khắc</string>
+    <string name="emergency_contacts">Liên hệ khẩn cấp</string>
+    <string name="safety_rhythm">Nhịp an toàn</string>
+</resources>
