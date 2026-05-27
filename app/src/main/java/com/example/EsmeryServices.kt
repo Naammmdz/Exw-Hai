@@ -38,6 +38,11 @@ class AuthGateway(
     )
   }
 
+  suspend fun signOut() {
+    runCatching { supabase.auth.signOut() }
+    repository.clearLocalSession()
+  }
+
   suspend fun resetPasswordStub(email: String) {
     require(email.isNotBlank()) { "Enter your email first." }
   }

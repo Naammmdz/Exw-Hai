@@ -1,6 +1,7 @@
 package com.example
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -28,6 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Check
@@ -42,6 +44,7 @@ import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -61,17 +64,20 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -102,6 +108,7 @@ import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.Sage
 import com.example.ui.theme.Surface
 import com.example.ui.theme.Taupe
+import java.util.Locale
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -135,15 +142,53 @@ enum class MainTab(val labelRes: Int, val icon: ImageVector) {
   Plans(R.string.plans, Icons.Rounded.CreditCard),
 }
 
+enum class AppLanguage(val tag: String) {
+  English("en"),
+  Vietnamese("vi");
+
+  companion object {
+    fun fromTag(tag: String): AppLanguage = entries.firstOrNull { it.tag == tag } ?: English
+  }
+}
+
+private fun AppLanguage.next(): AppLanguage = when (this) {
+  AppLanguage.English -> AppLanguage.Vietnamese
+  AppLanguage.Vietnamese -> AppLanguage.English
+}
+
+@Composable
+private fun LanguageButton(language: AppLanguage, onClick: () -> Unit) {
+  OutlinedButton(onClick = onClick, shape = RoundedCornerShape(8.dp)) {
+    Icon(Icons.Rounded.Translate, contentDescription = null, tint = Cocoa, modifier = Modifier.size(18.dp))
+    Spacer(Modifier.width(6.dp))
+    Text(stringResource(R.string.language), color = Cocoa, fontWeight = FontWeight.Bold)
+  }
+}
+
 @Composable
 fun EsmeryApp(
   authGateway: AuthGateway = remember { AuthGateway() },
 ) {
   val navController = rememberNavController()
-  NavHost(navController = navController, startDestination = Routes.SignIn) {
+  val baseContext = LocalContext.current
+  var languageTag by rememberSaveable { mutableStateOf(AppLanguage.English.tag) }
+  val language = AppLanguage.fromTag(languageTag)
+  val localizedContext = remember(baseContext, languageTag) {
+    val configuration = Configuration(baseContext.resources.configuration)
+    configuration.setLocale(Locale.forLanguageTag(languageTag))
+    baseContext.createConfigurationContext(configuration)
+  }
+
+  CompositionLocalProvider(
+    LocalContext provides localizedContext,
+    LocalConfiguration provides localizedContext.resources.configuration,
+  ) {
+    NavHost(navController = navController, startDestination = Routes.SignIn) {
     composable(Routes.SignIn) {
       WelcomeScreen(
         authGateway = authGateway,
+        language = language,
+        onToggleLanguage = { languageTag = language.next().tag },
         onNavigateToSignUp = { navController.navigate(Routes.SignUp) },
         onSignedIn = {
           navController.navigate(Routes.Home) {
@@ -155,6 +200,8 @@ fun EsmeryApp(
     composable(Routes.SignUp) {
       SignUpScreen(
         authGateway = authGateway,
+        language = language,
+        onToggleLanguage = { languageTag = language.next().tag },
         onNavigateBack = { navController.popBackStack() },
         onSignedUp = { navController.navigate(Routes.Onboarding) },
       )
@@ -183,8 +230,18 @@ fun EsmeryApp(
       )
     }
     composable(Routes.Home) {
-      HomeScreen()
+      HomeScreen(
+        authGateway = authGateway,
+        language = language,
+        onToggleLanguage = { languageTag = language.next().tag },
+        onSignedOut = {
+          navController.navigate(Routes.SignIn) {
+            popUpTo(Routes.Home) { inclusive = true }
+          }
+        },
+      )
     }
+  }
   }
 }
 
@@ -192,6 +249,8 @@ fun EsmeryApp(
 fun WelcomeScreen(
   modifier: Modifier = Modifier,
   authGateway: AuthGateway = remember { AuthGateway(InMemoryEsmeryRepository()) },
+  language: AppLanguage = AppLanguage.English,
+  onToggleLanguage: () -> Unit = {},
   onNavigateToSignUp: () -> Unit = {},
   onSignedIn: () -> Unit = {},
 ) {
@@ -202,6 +261,9 @@ fun WelcomeScreen(
     var message by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+      LanguageButton(language = language, onClick = onToggleLanguage)
+    }
     BrandHeader(
       title = stringResource(R.string.welcome_title),
       subtitle = stringResource(R.string.welcome_subtitle),
@@ -238,6 +300,8 @@ fun WelcomeScreen(
 @Composable
 fun SignUpScreen(
   authGateway: AuthGateway = remember { AuthGateway(InMemoryEsmeryRepository()) },
+  language: AppLanguage = AppLanguage.English,
+  onToggleLanguage: () -> Unit = {},
   onNavigateBack: () -> Unit = {},
   onSignedUp: () -> Unit = {},
 ) {
@@ -249,8 +313,11 @@ fun SignUpScreen(
     var message by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
-    IconButton(onClick = onNavigateBack) {
-      Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null, tint = Cocoa)
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+      IconButton(onClick = onNavigateBack) {
+        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null, tint = Cocoa)
+      }
+      LanguageButton(language = language, onClick = onToggleLanguage)
     }
     BrandHeader(title = "Start Your Journey", subtitle = "Set up a private safety circle with ESMERY.")
     EsmeryTextField(value = name, onValueChange = { name = it }, label = stringResource(R.string.full_name))
@@ -371,6 +438,10 @@ private fun SetupScreen(title: String, body: String, primary: String, onPrimary:
 @Composable
 fun HomeScreen(
   repository: com.example.data.EsmeryRepository = EsmeryServices.repository,
+  authGateway: AuthGateway = remember { AuthGateway(InMemoryEsmeryRepository()) },
+  language: AppLanguage = AppLanguage.English,
+  onToggleLanguage: () -> Unit = {},
+  onSignedOut: () -> Unit = {},
 ) {
   val state by repository.state.collectAsState()
   var selectedTab by remember { mutableStateOf(MainTab.Hearth) }
@@ -407,6 +478,11 @@ fun HomeScreen(
           scope.launch {
             repository.checkIn()
             toast = "Your circle has been notified."
+          }
+        }, language = language, onToggleLanguage = onToggleLanguage, onLogout = {
+          scope.launch {
+            authGateway.signOut()
+            onSignedOut()
           }
         })
         MainTab.Circle -> CircleScreen(state, repository, onToast = { toast = it })
@@ -447,8 +523,28 @@ private fun TabButton(tab: MainTab, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun HearthScreen(state: EsmeryState, onCheckIn: () -> Unit) {
+private fun HearthScreen(
+  state: EsmeryState,
+  onCheckIn: () -> Unit,
+  language: AppLanguage,
+  onToggleLanguage: () -> Unit,
+  onLogout: () -> Unit,
+) {
   ScreenList(title = "Good morning, ${state.profile.displayName}", subtitle = "Last check-in: ${friendlyTime(state.profile.lastSafeAt)}") {
+    item {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        LanguageButton(language = language, onClick = onToggleLanguage)
+        OutlinedButton(onClick = onLogout, shape = RoundedCornerShape(8.dp)) {
+          Icon(Icons.AutoMirrored.Rounded.Logout, contentDescription = null, tint = Cocoa, modifier = Modifier.size(18.dp))
+          Spacer(Modifier.width(6.dp))
+          Text(stringResource(R.string.logout), color = Cocoa, fontWeight = FontWeight.Bold)
+        }
+      }
+    }
     item {
       Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Button(

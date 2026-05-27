@@ -19,6 +19,11 @@ class InMemoryEsmeryRepository : EsmeryRepository {
     _state.value = seedState(userId, displayName ?: "Alex Rivers", email)
   }
 
+  override suspend fun clearLocalSession() {
+    userId = "local-user"
+    _state.value = seedState(userId, "Alex Rivers", "alex@example.com")
+  }
+
   override suspend fun checkIn(note: String?): CheckIn {
     val now = now()
     val checkIn = CheckIn(id = id(), userId = userId, note = note, createdAt = now)

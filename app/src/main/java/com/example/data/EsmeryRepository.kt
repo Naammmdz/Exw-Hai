@@ -6,6 +6,7 @@ interface EsmeryRepository {
   val state: StateFlow<EsmeryState>
 
   suspend fun loadForUser(userId: String, email: String?, displayName: String?)
+  suspend fun clearLocalSession()
   suspend fun checkIn(note: String? = null): CheckIn
   suspend fun addFriendRequest(contact: String, name: String, relationship: String): FriendRequest
   suspend fun updateFriendRequest(requestId: String, status: CircleStatus)

@@ -21,6 +21,10 @@ class ResilientEsmeryRepository(
     }
   }
 
+  override suspend fun clearLocalSession() {
+    local.clearLocalSession()
+  }
+
   override suspend fun checkIn(note: String?): CheckIn {
     val checkIn = local.checkIn(note)
     val state = local.state.value
