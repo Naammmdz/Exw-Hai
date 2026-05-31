@@ -130,6 +130,39 @@ alter table public.safety_rhythms enable row level security;
 alter table public.safety_settings enable row level security;
 alter table public.subscription_status enable row level security;
 
+create or replace function public.esmery_can_deliver_to(target_user_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select auth.uid() is not null
+    and (
+      auth.uid() = target_user_id
+      or exists (
+        select 1
+        from public.circle_members
+        where status = 'accepted'
+          and (
+            (owner_user_id = auth.uid() and member_user_id = target_user_id)
+            or (owner_user_id = target_user_id and member_user_id = auth.uid())
+          )
+      )
+      or exists (
+        select 1
+        from public.friend_requests
+        where status in ('pending', 'accepted')
+          and (
+            (sender_user_id = auth.uid() and receiver_user_id = target_user_id)
+            or (sender_user_id = target_user_id and receiver_user_id = auth.uid())
+          )
+      )
+    );
+$$;
+
+grant execute on function public.esmery_can_deliver_to(uuid) to authenticated;
+
 drop policy if exists "profiles-own" on public.profiles;
 drop policy if exists "profiles-authenticated-lookup" on public.profiles;
 drop policy if exists "circle-owner" on public.circle_members;
@@ -179,37 +212,11 @@ create policy "friend-requests-receiver-update" on public.friend_requests for up
 create policy "check-ins-own" on public.check_ins for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "timeline-own" on public.timeline_events for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "timeline-circle-insert" on public.timeline_events for insert with check (
-  auth.uid() = user_id
-  or exists (
-    select 1
-    from public.circle_members
-    where owner_user_id = auth.uid()
-      and member_user_id = user_id
-      and status = 'accepted'
-  )
-  or exists (
-    select 1
-    from public.friend_requests
-    where sender_user_id = auth.uid()
-      and receiver_user_id = user_id
-  )
+  public.esmery_can_deliver_to(user_id)
 );
 create policy "notifications-own" on public.notifications for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "notifications-circle-insert" on public.notifications for insert with check (
-  auth.uid() = user_id
-  or exists (
-    select 1
-    from public.circle_members
-    where owner_user_id = auth.uid()
-      and member_user_id = user_id
-      and status = 'accepted'
-  )
-  or exists (
-    select 1
-    from public.friend_requests
-    where sender_user_id = auth.uid()
-      and receiver_user_id = user_id
-  )
+  public.esmery_can_deliver_to(user_id)
 );
 create policy "moments-own" on public.moments for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "emergency-own" on public.emergency_contacts for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
