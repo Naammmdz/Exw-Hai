@@ -77,6 +77,23 @@ class InMemoryEsmeryRepository : EsmeryRepository {
   ): FriendRequest {
     val now = now()
     val normalizedContact = contact.normalizedContact()
+    val existingRequest = state.value.friendRequests.firstOrNull {
+      it.status != CircleStatus.Declined && it.receiverContact.normalizedContact() == normalizedContact
+    }
+    if (existingRequest != null) return existingRequest
+    val existingMember = state.value.circleMembers.firstOrNull {
+      it.status != CircleStatus.Declined && it.invitedContact.normalizedContact() == normalizedContact
+    }
+    if (existingMember != null) {
+      return FriendRequest(
+        id = existingMember.id,
+        senderUserId = userId,
+        receiverUserId = existingMember.memberUserId,
+        receiverContact = existingMember.invitedContact.normalizedContact(),
+        status = existingMember.status,
+        createdAt = now,
+      )
+    }
     val request = FriendRequest(id = id(), senderUserId = userId, receiverContact = normalizedContact, createdAt = now)
     val member = CircleMember(
       id = request.id,

@@ -52,6 +52,7 @@ import com.example.data.CircleStatus
 import com.example.data.EsmeryRepository
 import com.example.data.EsmeryState
 import com.example.data.FriendRequest
+import com.example.data.normalizedContact
 import com.example.ui.theme.Apricot
 import com.example.ui.theme.Cocoa
 import com.example.ui.theme.Sage
@@ -70,8 +71,25 @@ fun CircleScreen(
   val language = LocalAppLanguage.current
   val acceptedMessage = t("Friend request accepted.", "Đã chấp nhận lời mời.")
   val declinedMessage = t("Friend request declined.", "Đã từ chối lời mời.")
-  val invitationSentMessage = t("Invitation sent.", "Đã gửi lời mời.")
+  val invitationSentMessage = t("Invitation is pending.", "Lời mời đang chờ phản hồi.")
+  val alreadyInCircleMessage = t("This person is already in your Circle.", "Người này đã có trong Vòng thân.")
+  val cannotAddSelfMessage = t("You cannot add yourself to Circle.", "Bạn không thể tự thêm chính mình vào Vòng thân.")
   val refreshedMessage = t("Circle updated.", "Đã cập nhật vòng thân.")
+  val acceptedUserIds = state.circleMembers
+    .filter { it.status == CircleStatus.Accepted }
+    .mapNotNull { it.memberUserId }
+    .toSet()
+  val acceptedContacts = state.circleMembers
+    .filter { it.status == CircleStatus.Accepted }
+    .map { it.invitedContact.normalizedContact() }
+    .toSet()
+  val pendingRequests = state.friendRequests.filter { request ->
+    request.status == CircleStatus.Pending &&
+      request.senderUserId !in acceptedUserIds &&
+      (request.receiverUserId == null || request.receiverUserId !in acceptedUserIds) &&
+      request.receiverContact.normalizedContact() !in acceptedContacts
+  }
+  val visibleMembers = state.circleMembers.filter { it.status == CircleStatus.Accepted }
 
   ScreenList(title = appString(R.string.circle), subtitle = t("Trusted people who can receive safety alerts.", "Những người tin cậy có thể nhận cảnh báo an toàn.")) {
     item {
@@ -91,7 +109,7 @@ fun CircleScreen(
         Text(t("Refresh Circle", "Cập nhật Vòng thân"), color = Cocoa)
       }
     }
-    if (state.friendRequests.isEmpty() && state.circleMembers.isEmpty()) {
+    if (pendingRequests.isEmpty() && visibleMembers.isEmpty()) {
       item {
         InfoCard(
           icon = Icons.Rounded.PersonSearch,
@@ -103,10 +121,14 @@ fun CircleScreen(
         )
       }
     }
-    items(state.friendRequests) { request ->
+    items(pendingRequests) { request ->
+      val senderName = state.circleMembers.firstOrNull { member ->
+        member.memberUserId == request.senderUserId || member.ownerUserId == request.senderUserId
+      }?.name?.takeIf { it.isNotBlank() } ?: t("Trusted contact", "Người tin cậy")
       FriendRequestCard(
         request = request,
         currentUserId = state.profile.id,
+        senderName = senderName,
         onAccept = {
           actionScope.launch {
             repository.updateFriendRequest(request.id, CircleStatus.Accepted)
@@ -121,29 +143,39 @@ fun CircleScreen(
         },
       )
     }
-    items(state.circleMembers) { member ->
-      CircleMemberCard(member, onNudge = {
-        actionScope.launch {
-          repository.sendNudge(member.id)
-          onToast(tr(language, "Gentle nudge sent to ${member.name}.", "Đã gửi nhắc nhở nhẹ nhàng cho ${member.name}."))
-        }
-      })
+    items(visibleMembers) { member ->
+      CircleMemberCard(
+        member = member,
+        canNudge = member.status == CircleStatus.Accepted && member.memberUserId != null,
+        onNudge = {
+          actionScope.launch {
+            repository.sendNudge(member.id)
+            onToast(tr(language, "Gentle nudge sent to ${member.name}.", "Đã gửi nhắc nhở nhẹ nhàng cho ${member.name}."))
+          }
+        },
+      )
     }
   }
 
   if (showAdd) {
     AddFriendDialog(onDismiss = { showAdd = false }, onAdd = { contact, name, relationship ->
       actionScope.launch {
-        repository.addFriendRequest(contact, name, relationship)
+        val request = repository.addFriendRequest(contact, name, relationship)
         showAdd = false
-        onToast(invitationSentMessage)
+        onToast(
+          when (request.status) {
+            CircleStatus.Accepted -> alreadyInCircleMessage
+            CircleStatus.Declined -> cannotAddSelfMessage
+            CircleStatus.Pending -> invitationSentMessage
+          },
+        )
       }
     })
   }
 }
 
 @Composable
-private fun CircleMemberCard(member: CircleMember, onNudge: () -> Unit) {
+private fun CircleMemberCard(member: CircleMember, canNudge: Boolean, onNudge: () -> Unit) {
   CardBlock {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
       Surface(shape = CircleShape, color = Sage, modifier = Modifier.size(44.dp)) {
@@ -153,8 +185,10 @@ private fun CircleMemberCard(member: CircleMember, onNudge: () -> Unit) {
         Text(member.name, color = Cocoa, fontWeight = FontWeight.Bold)
         Text("${localizedRelationship(member.relationship)} - ${localizedCircleStatus(member.status)} - ${friendlyTimeText(member.lastSafeAt)}", color = Taupe)
       }
-      OutlinedButton(onClick = onNudge, shape = RoundedCornerShape(8.dp)) {
-        Text(t("Nudge", "Nhắc nhẹ"), color = Cocoa)
+      if (canNudge) {
+        OutlinedButton(onClick = onNudge, shape = RoundedCornerShape(8.dp)) {
+          Text(t("Nudge", "Nhắc nhẹ"), color = Cocoa)
+        }
       }
     }
   }
@@ -164,6 +198,7 @@ private fun CircleMemberCard(member: CircleMember, onNudge: () -> Unit) {
 private fun FriendRequestCard(
   request: FriendRequest,
   currentUserId: String,
+  senderName: String,
   onAccept: () -> Unit,
   onDecline: () -> Unit,
 ) {
@@ -179,7 +214,7 @@ private fun FriendRequestCard(
         )
         Text(
           if (isReceivedRequest) {
-            t("From ${request.senderUserId.take(8)} - ${localizedCircleStatus(request.status)}", "Từ ${request.senderUserId.take(8)} - ${localizedCircleStatus(request.status)}")
+            t("$senderName invited you - ${localizedCircleStatus(request.status)}", "$senderName đã mời bạn - ${localizedCircleStatus(request.status)}")
           } else {
             "${request.receiverContact} - ${localizedCircleStatus(request.status)}"
           },

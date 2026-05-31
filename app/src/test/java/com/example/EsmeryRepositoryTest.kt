@@ -52,6 +52,18 @@ class EsmeryRepositoryTest {
   }
 
   @Test
+  fun addFriendRequestDoesNotDuplicateSameContactLocally() = runTest {
+    val repository = InMemoryEsmeryRepository()
+
+    val first = repository.addFriendRequest("friend@example.com", "Friend", "Sibling")
+    val second = repository.addFriendRequest("FRIEND@example.com", "Friend Again", "Sibling")
+
+    assertEquals(first.id, second.id)
+    assertEquals(1, repository.state.value.friendRequests.count { it.receiverContact == "friend@example.com" })
+    assertEquals(1, repository.state.value.circleMembers.count { it.invitedContact == "friend@example.com" })
+  }
+
+  @Test
   fun shareMomentAndSaveRhythmAppendState() = runTest {
     val repository = InMemoryEsmeryRepository()
 
@@ -202,6 +214,59 @@ class EsmeryRepositoryTest {
   }
 
   @Test
+  fun resilientRepositoryDoesNotSendDuplicateWhenAlreadyAccepted() = runTest {
+    val remoteState = emptyStateFor("account-a", "a@example.com", "Account A").copy(
+      circleMembers = listOf(
+        CircleMember(
+          id = "member-a-b",
+          ownerUserId = "account-a",
+          memberUserId = "account-b",
+          invitedContact = "b@example.com",
+          name = "Account B",
+          relationship = "Trusted contact",
+          status = CircleStatus.Accepted,
+        ),
+      ),
+    )
+    val remote = FakeRemote(
+      remoteState = remoteState,
+      profilesByContact = mapOf("b@example.com" to Profile(id = "account-b", displayName = "Account B", email = "b@example.com")),
+    )
+    val repository = ResilientEsmeryRepository(remote = remote)
+
+    repository.loadForUser("account-a", "a@example.com", "Account A")
+    val request = repository.addFriendRequest("b@example.com", "Account B", "Trusted contact")
+
+    assertEquals(CircleStatus.Accepted, request.status)
+    assertTrue(remote.friendRequests.isEmpty())
+    assertEquals(1, repository.state.value.circleMembers.count { it.memberUserId == "account-b" })
+  }
+
+  @Test
+  fun resilientRepositoryUsesIncomingPendingRequestInsteadOfCreatingReverseDuplicate() = runTest {
+    val incoming = FriendRequest(
+      id = "request-a-to-b",
+      senderUserId = "account-a",
+      receiverUserId = "account-b",
+      receiverContact = "b@example.com",
+      status = CircleStatus.Pending,
+      createdAt = "2026-05-31T10:00:00",
+    )
+    val remoteState = emptyStateFor("account-b", "b@example.com", "Account B").copy(friendRequests = listOf(incoming))
+    val remote = FakeRemote(
+      remoteState = remoteState,
+      profilesByContact = mapOf("a@example.com" to Profile(id = "account-a", displayName = "Account A", email = "a@example.com")),
+    )
+    val repository = ResilientEsmeryRepository(remote = remote)
+
+    repository.loadForUser("account-b", "b@example.com", "Account B")
+    val request = repository.addFriendRequest("a@example.com", "Account A", "Trusted contact")
+
+    assertEquals("request-a-to-b", request.id)
+    assertTrue(remote.friendRequests.isEmpty())
+  }
+
+  @Test
   fun resilientRepositoryStartsRealUserWithEmptyCircleWhenRemoteHasNoData() = runTest {
     val remote = FakeRemote(null)
     val repository = ResilientEsmeryRepository(remote = remote)
@@ -241,15 +306,17 @@ class EsmeryRepositoryTest {
 private class FakeRemote(
   private val remoteState: EsmeryState?,
   private val profilesById: Map<String, Profile> = emptyMap(),
+  private val profilesByContact: Map<String, Profile> = emptyMap(),
 ) : EsmeryRemoteDataSource {
   val notifications = mutableListOf<EsmeryNotification>()
   val checkIns = mutableListOf<CheckIn>()
   val circleMembers = mutableListOf<CircleMember>()
+  val friendRequests = mutableListOf<FriendRequest>()
   val timelineEvents = mutableListOf<TimelineEvent>()
   var updatedCircleMemberUserId: String? = null
 
   override suspend fun fetchState(userId: String, email: String?, displayName: String?): EsmeryState? = remoteState
-  override suspend fun findProfileByContact(contact: String): Profile? = null
+  override suspend fun findProfileByContact(contact: String): Profile? = profilesByContact[contact.lowercase()]
   override suspend fun findProfileById(userId: String): Profile? = profilesById[userId]
   override suspend fun upsertProfile(profile: Profile) = Unit
   override suspend fun updateProfileLastSafeAt(userId: String, lastSafeAt: String?) = Unit
@@ -259,7 +326,9 @@ private class FakeRemote(
   override suspend fun updateCircleMemberStatus(memberId: String, status: CircleStatus, memberUserId: String?) {
     updatedCircleMemberUserId = memberUserId
   }
-  override suspend fun insertFriendRequest(request: FriendRequest) = Unit
+  override suspend fun insertFriendRequest(request: FriendRequest) {
+    friendRequests += request
+  }
   override suspend fun updateFriendRequestStatus(requestId: String, status: CircleStatus) = Unit
   override suspend fun insertCheckIn(checkIn: CheckIn) {
     checkIns += checkIn

@@ -84,8 +84,44 @@ class ResilientEsmeryRepository(
 
   override suspend fun addFriendRequest(contact: String, name: String, relationship: String): FriendRequest {
     val normalizedContact = contact.normalizedContact()
-    val request = local.addFriendRequest(normalizedContact, name, relationship)
     val matchedProfile = remote.tryFindProfileByContact(normalizedContact)
+    refresh()
+    val syncedState = local.state.value
+    if (matchedProfile?.id == syncedState.profile.id) {
+      return FriendRequest(
+        id = "",
+        senderUserId = syncedState.profile.id,
+        receiverUserId = syncedState.profile.id,
+        receiverContact = normalizedContact,
+        status = CircleStatus.Declined,
+        createdAt = "",
+      )
+    }
+    val existingRequest = syncedState.friendRequests.firstOrNull {
+      it.status != CircleStatus.Declined && it.matchesConnection(
+        currentUserId = syncedState.profile.id,
+        contact = normalizedContact,
+        profileId = matchedProfile?.id,
+      )
+    }
+    if (existingRequest != null) return existingRequest
+    val existingMember = syncedState.circleMembers.firstOrNull {
+      it.status != CircleStatus.Declined && it.matchesConnection(
+        contact = normalizedContact,
+        profileId = matchedProfile?.id,
+      )
+    }
+    if (existingMember != null) {
+      return FriendRequest(
+        id = existingMember.id,
+        senderUserId = syncedState.profile.id,
+        receiverUserId = existingMember.memberUserId ?: matchedProfile?.id,
+        receiverContact = existingMember.invitedContact.normalizedContact(),
+        status = existingMember.status,
+        createdAt = "",
+      )
+    }
+    val request = local.addFriendRequest(normalizedContact, name, relationship)
     if (matchedProfile != null) {
       val current = local.state.value
       local.replaceState(
@@ -375,7 +411,7 @@ class ResilientEsmeryRepository(
   private fun mergeState(localState: EsmeryState, remoteState: EsmeryState): EsmeryState {
     if (localState.profile.id != remoteState.profile.id) return remoteState
     return remoteState.copy(
-      circleMembers = mergeById(localState.circleMembers, remoteState.circleMembers) { it.id }
+      circleMembers = dedupeCircleMembers(mergeById(localState.circleMembers, remoteState.circleMembers) { it.id })
         .sortedByDescending { it.lastSafeAt.orEmpty() },
       friendRequests = mergeById(localState.friendRequests, remoteState.friendRequests) { it.id }
         .sortedByDescending { it.createdAt },
@@ -400,12 +436,52 @@ class ResilientEsmeryRepository(
     remoteItems.forEach { result[key(it)] = it }
     return result.values.toList()
   }
+
+  private fun dedupeCircleMembers(items: List<CircleMember>): List<CircleMember> {
+    val sorted = items.sortedWith(
+      compareByDescending<CircleMember> { it.status == CircleStatus.Accepted }
+        .thenByDescending { it.memberUserId != null }
+        .thenByDescending { it.lastSafeAt.orEmpty() },
+    )
+    val result = mutableListOf<CircleMember>()
+    sorted.forEach { item ->
+      val keys = item.connectionKeys()
+      val hasSameConnection = result.any { existing ->
+        existing.connectionKeys().any { it in keys }
+      }
+      if (!hasSameConnection) result += item
+    }
+    return result
+  }
 }
 
 private data class RemoteDelivery(
   val event: TimelineEvent,
   val notification: EsmeryNotification,
 )
+
+private fun CircleMember.matchesConnection(contact: String, profileId: String?): Boolean {
+  val normalizedContact = contact.normalizedContact()
+  return (memberUserId != null && memberUserId == profileId) ||
+    invitedContact.normalizedContact() == normalizedContact
+}
+
+private fun FriendRequest.matchesConnection(
+  currentUserId: String,
+  contact: String,
+  profileId: String?,
+): Boolean {
+  val normalizedContact = contact.normalizedContact()
+  val receiverMatches = (receiverUserId != null && receiverUserId == profileId) ||
+    receiverContact.normalizedContact() == normalizedContact
+  val senderMatches = senderUserId == profileId && senderUserId != currentUserId
+  return receiverMatches || senderMatches
+}
+
+private fun CircleMember.connectionKeys(): Set<String> = buildSet {
+  memberUserId?.takeIf { it.isNotBlank() }?.let { add("user:$it") }
+  invitedContact.normalizedContact().takeIf { it.isNotBlank() }?.let { add("contact:$it") }
+}
 
 interface EsmeryRemoteDataSource {
   suspend fun fetchState(userId: String, email: String?, displayName: String?): EsmeryState?
@@ -483,6 +559,16 @@ class SupabaseEsmeryRemoteDataSource(
       }
     }.orEmpty()
     val receivedRequests = receivedByUserId + receivedByContact
+    val receivedSenderProfiles = receivedRequests
+      .map { it.senderUserId }
+      .distinct()
+      .associateWith { senderId ->
+        remoteOrNull("profiles request sender $senderId") {
+          client.from("profiles").select {
+            filter { eq("id", senderId) }
+          }.decodeSingleOrNull<Profile>()
+        }
+      }
 
     val subscription = remoteOrNull("subscription_status") {
       client.from("subscription_status").select {
@@ -525,7 +611,20 @@ class SupabaseEsmeryRemoteDataSource(
           lastSafeAt = ownerProfile?.lastSafeAt ?: row.lastSafeAt,
         )
       }
-    val circleMembers = (ownedCircleMembers + receivedCircleMembers)
+    val requestCircleMembers = receivedRequests.map { request ->
+      val senderProfile = receivedSenderProfiles[request.senderUserId]
+      CircleMember(
+        id = request.id,
+        ownerUserId = userId,
+        memberUserId = request.senderUserId,
+        invitedContact = senderProfile?.email ?: request.senderUserId,
+        name = senderProfile?.displayName ?: "Trusted contact",
+        relationship = "Trusted contact",
+        status = request.status,
+        lastSafeAt = senderProfile?.lastSafeAt,
+      )
+    }
+    val circleMembers = (ownedCircleMembers + receivedCircleMembers + requestCircleMembers)
       .distinctBy { it.memberUserId ?: it.invitedContact }
       .sortedByDescending { it.lastSafeAt.orEmpty() }
 
