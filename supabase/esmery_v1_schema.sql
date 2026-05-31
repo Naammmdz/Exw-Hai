@@ -27,10 +27,20 @@ create table if not exists public.circle_members (
 create table if not exists public.friend_requests (
   id uuid primary key default gen_random_uuid(),
   sender_user_id uuid not null references auth.users(id) on delete cascade,
+  receiver_user_id uuid references auth.users(id) on delete set null,
   receiver_contact text not null,
   status text not null default 'pending' check (status in ('pending', 'accepted', 'declined')),
   created_at timestamptz not null default now()
 );
+
+alter table public.friend_requests
+  add column if not exists receiver_user_id uuid references auth.users(id) on delete set null;
+
+update public.friend_requests
+set receiver_user_id = profiles.id
+from public.profiles
+where public.friend_requests.receiver_user_id is null
+  and lower(public.friend_requests.receiver_contact) = lower(profiles.email);
 
 create table if not exists public.check_ins (
   id uuid primary key default gen_random_uuid(),
@@ -53,13 +63,17 @@ create table if not exists public.timeline_events (
 create table if not exists public.notifications (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  type text not null check (type in ('check_in_success', 'gentle_nudge', 'missed_check_in', 'emergency_alert', 'moment_shared')),
+  type text not null check (type in ('check_in_success', 'friend_request', 'gentle_nudge', 'missed_check_in', 'emergency_alert', 'moment_shared')),
   title text not null,
   body text not null,
   related_entity_id text,
   is_read boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+alter table public.notifications drop constraint if exists notifications_type_check;
+alter table public.notifications add constraint notifications_type_check
+  check (type in ('check_in_success', 'friend_request', 'gentle_nudge', 'missed_check_in', 'emergency_alert', 'moment_shared'));
 
 create table if not exists public.moments (
   id uuid primary key default gen_random_uuid(),
@@ -127,7 +141,9 @@ drop policy if exists "friend-requests-receiver-read" on public.friend_requests;
 drop policy if exists "friend-requests-receiver-update" on public.friend_requests;
 drop policy if exists "check-ins-own" on public.check_ins;
 drop policy if exists "timeline-own" on public.timeline_events;
+drop policy if exists "timeline-circle-insert" on public.timeline_events;
 drop policy if exists "notifications-own" on public.notifications;
+drop policy if exists "notifications-circle-insert" on public.notifications;
 drop policy if exists "moments-own" on public.moments;
 drop policy if exists "emergency-own" on public.emergency_contacts;
 drop policy if exists "rhythm-own" on public.safety_rhythms;
@@ -139,27 +155,62 @@ create policy "profiles-authenticated-lookup" on public.profiles for select usin
 create policy "circle-owner" on public.circle_members for all using (auth.uid() = owner_user_id) with check (auth.uid() = owner_user_id);
 create policy "circle-member-read" on public.circle_members for select using (
   auth.uid() = member_user_id
-  or lower(invited_contact) = lower((select email from auth.users where id = auth.uid()))
+  or lower(invited_contact) = lower(coalesce(auth.jwt() ->> 'email', ''))
 );
 create policy "circle-member-receiver-update" on public.circle_members for update using (
   auth.uid() = member_user_id
-  or lower(invited_contact) = lower((select email from auth.users where id = auth.uid()))
+  or lower(invited_contact) = lower(coalesce(auth.jwt() ->> 'email', ''))
 ) with check (
   auth.uid() = member_user_id
-  or lower(invited_contact) = lower((select email from auth.users where id = auth.uid()))
+  or lower(invited_contact) = lower(coalesce(auth.jwt() ->> 'email', ''))
 );
 create policy "friend-requests-sender" on public.friend_requests for all using (auth.uid() = sender_user_id) with check (auth.uid() = sender_user_id);
 create policy "friend-requests-receiver-read" on public.friend_requests for select using (
-  lower(receiver_contact) = lower((select email from auth.users where id = auth.uid()))
+  auth.uid() = receiver_user_id
+  or lower(receiver_contact) = lower(coalesce(auth.jwt() ->> 'email', ''))
 );
 create policy "friend-requests-receiver-update" on public.friend_requests for update using (
-  lower(receiver_contact) = lower((select email from auth.users where id = auth.uid()))
+  auth.uid() = receiver_user_id
+  or lower(receiver_contact) = lower(coalesce(auth.jwt() ->> 'email', ''))
 ) with check (
-  lower(receiver_contact) = lower((select email from auth.users where id = auth.uid()))
+  auth.uid() = receiver_user_id
+  or lower(receiver_contact) = lower(coalesce(auth.jwt() ->> 'email', ''))
 );
 create policy "check-ins-own" on public.check_ins for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "timeline-own" on public.timeline_events for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "timeline-circle-insert" on public.timeline_events for insert with check (
+  auth.uid() = user_id
+  or exists (
+    select 1
+    from public.circle_members
+    where owner_user_id = auth.uid()
+      and member_user_id = user_id
+      and status = 'accepted'
+  )
+  or exists (
+    select 1
+    from public.friend_requests
+    where sender_user_id = auth.uid()
+      and receiver_user_id = user_id
+  )
+);
 create policy "notifications-own" on public.notifications for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "notifications-circle-insert" on public.notifications for insert with check (
+  auth.uid() = user_id
+  or exists (
+    select 1
+    from public.circle_members
+    where owner_user_id = auth.uid()
+      and member_user_id = user_id
+      and status = 'accepted'
+  )
+  or exists (
+    select 1
+    from public.friend_requests
+    where sender_user_id = auth.uid()
+      and receiver_user_id = user_id
+  )
+);
 create policy "moments-own" on public.moments for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "emergency-own" on public.emergency_contacts for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "rhythm-own" on public.safety_rhythms for all using (auth.uid() = user_id) with check (auth.uid() = user_id);

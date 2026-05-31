@@ -29,7 +29,7 @@ class ResilientEsmeryRepository(
     val id = userId ?: return
     val remoteState = remote.tryFetchState(id, email, displayName)
     if (remoteState != null) {
-      local.replaceState(remoteState)
+      local.replaceState(mergeState(local.state.value, remoteState))
       remote.tryRemote {
         upsertProfile(local.state.value.profile)
         upsertSubscription(local.state.value.subscriptionStatus)
@@ -41,7 +41,7 @@ class ResilientEsmeryRepository(
         upsertSubscription(local.state.value.subscriptionStatus)
         upsertSafetySettings(local.state.value.safetySettings)
       }
-      remote.tryFetchState(id, email, displayName)?.let { local.replaceState(it) }
+      remote.tryFetchState(id, email, displayName)?.let { local.replaceState(mergeState(local.state.value, it)) }
     }
   }
 
@@ -60,6 +60,10 @@ class ResilientEsmeryRepository(
       updateProfileLastSafeAt(state.profile.id, state.profile.lastSafeAt)
       insertTimelineEvent(state.timelineEvents.first())
       insertNotification(state.notifications.first())
+      recipientDeliveriesForCheckIn(state, checkIn.id, checkIn.createdAt).forEach { delivery ->
+        insertNotification(delivery.notification)
+        insertTimelineEvent(delivery.event)
+      }
     }
     return checkIn
   }
@@ -72,6 +76,9 @@ class ResilientEsmeryRepository(
       val current = local.state.value
       local.replaceState(
         current.copy(
+          friendRequests = current.friendRequests.map { item ->
+            if (item.id == request.id) item.copy(receiverUserId = matchedProfile.id) else item
+          },
           circleMembers = current.circleMembers.map { member ->
             if (member.id == request.id) {
               member.copy(
@@ -86,10 +93,24 @@ class ResilientEsmeryRepository(
       )
     }
     val state = local.state.value
+    val requestForRemote = state.friendRequests.firstOrNull { it.id == request.id } ?: request
     remote.tryRemote {
-      insertFriendRequest(request)
+      insertFriendRequest(requestForRemote)
       upsertCircleMember(state.circleMembers.first())
       insertTimelineEvent(state.timelineEvents.first())
+      requestForRemote.receiverUserId?.let { receiverId ->
+        insertNotification(
+          EsmeryNotification(
+            id = id(),
+            userId = receiverId,
+            type = NotificationType.FriendRequest,
+            title = "Circle invitation received",
+            body = "Open Circle to accept or decline this invitation.",
+            relatedEntityId = requestForRemote.id,
+            createdAt = requestForRemote.createdAt,
+          ),
+        )
+      }
     }
     return request
   }
@@ -138,9 +159,33 @@ class ResilientEsmeryRepository(
 
   override suspend fun sendNudge(memberId: String): TimelineEvent {
     val event = local.sendNudge(memberId)
+    val state = local.state.value
     remote.tryRemote {
       insertTimelineEvent(event)
       insertNotification(local.state.value.notifications.first())
+      state.circleMembers.firstOrNull { it.id == memberId }?.memberUserId?.let { receiverId ->
+        val notification = EsmeryNotification(
+          id = id(),
+          userId = receiverId,
+          type = NotificationType.GentleNudge,
+          title = "Gentle nudge received",
+          body = "${state.profile.displayName} sent you a gentle nudge.",
+          relatedEntityId = memberId,
+          createdAt = event.createdAt,
+        )
+        insertNotification(notification)
+        insertTimelineEvent(
+          TimelineEvent(
+            id = id(),
+            userId = receiverId,
+            type = TimelineEventType.Nudge,
+            title = "Gentle nudge received",
+            body = "${state.profile.displayName} sent you a gentle nudge.",
+            relatedEntityId = memberId,
+            createdAt = event.createdAt,
+          ),
+        )
+      }
     }
     return event
   }
@@ -152,6 +197,10 @@ class ResilientEsmeryRepository(
       insertMoment(moment)
       insertTimelineEvent(event)
       insertNotification(local.state.value.notifications.first())
+      recipientDeliveriesForMoment(local.state.value, moment, event.createdAt).forEach { delivery ->
+        insertNotification(delivery.notification)
+        insertTimelineEvent(delivery.event)
+      }
     }
     return moment
   }
@@ -243,7 +292,106 @@ class ResilientEsmeryRepository(
     }
     return subscription
   }
+
+  private fun recipientDeliveriesForCheckIn(
+    state: EsmeryState,
+    checkInId: String,
+    createdAt: String,
+  ): List<RemoteDelivery> = acceptedRecipientIds(state).map { receiverId ->
+    val title = "${state.profile.displayName} is safe"
+    val body = "A fresh safety check-in was sent."
+    RemoteDelivery(
+      event = TimelineEvent(
+        id = id(),
+        userId = receiverId,
+        type = TimelineEventType.CheckIn,
+        title = title,
+        body = body,
+        relatedEntityId = checkInId,
+        createdAt = createdAt,
+      ),
+      notification = EsmeryNotification(
+        id = id(),
+        userId = receiverId,
+        type = NotificationType.CheckInSuccess,
+        title = title,
+        body = body,
+        relatedEntityId = checkInId,
+        createdAt = createdAt,
+      ),
+    )
+  }
+
+  private fun recipientDeliveriesForMoment(
+    state: EsmeryState,
+    moment: Moment,
+    createdAt: String,
+  ): List<RemoteDelivery> = acceptedRecipientIds(state).map { receiverId ->
+    val title = "${state.profile.displayName} shared a moment"
+    RemoteDelivery(
+      event = TimelineEvent(
+        id = id(),
+        userId = receiverId,
+        type = TimelineEventType.Moment,
+        title = title,
+        body = moment.caption,
+        relatedEntityId = moment.id,
+        createdAt = createdAt,
+      ),
+      notification = EsmeryNotification(
+        id = id(),
+        userId = receiverId,
+        type = NotificationType.MomentShared,
+        title = title,
+        body = moment.caption,
+        relatedEntityId = moment.id,
+        createdAt = createdAt,
+      ),
+    )
+  }
+
+  private fun acceptedRecipientIds(state: EsmeryState): List<String> = state.circleMembers
+    .filter { it.status == CircleStatus.Accepted }
+    .mapNotNull { it.memberUserId }
+    .filterNot { it == state.profile.id }
+    .distinct()
+
+  private fun id(): String = UUID.randomUUID().toString()
+
+  private fun mergeState(localState: EsmeryState, remoteState: EsmeryState): EsmeryState {
+    if (localState.profile.id != remoteState.profile.id) return remoteState
+    return remoteState.copy(
+      circleMembers = mergeById(localState.circleMembers, remoteState.circleMembers) { it.id }
+        .sortedByDescending { it.lastSafeAt.orEmpty() },
+      friendRequests = mergeById(localState.friendRequests, remoteState.friendRequests) { it.id }
+        .sortedByDescending { it.createdAt },
+      checkIns = mergeById(localState.checkIns, remoteState.checkIns) { it.id }
+        .sortedByDescending { it.createdAt },
+      timelineEvents = mergeById(localState.timelineEvents, remoteState.timelineEvents) { it.id }
+        .sortedByDescending { it.createdAt },
+      notifications = mergeById(localState.notifications, remoteState.notifications) { it.id }
+        .sortedByDescending { it.createdAt },
+      moments = mergeById(localState.moments, remoteState.moments) { it.id }
+        .sortedByDescending { it.createdAt },
+      emergencyContacts = mergeById(localState.emergencyContacts, remoteState.emergencyContacts) { it.id }
+        .sortedBy { it.name },
+      safetyRhythms = mergeById(localState.safetyRhythms, remoteState.safetyRhythms) { it.id }
+        .sortedBy { it.checkTime },
+    )
+  }
+
+  private fun <T> mergeById(localItems: List<T>, remoteItems: List<T>, key: (T) -> String): List<T> {
+    val result = LinkedHashMap<String, T>()
+    localItems.forEach { result[key(it)] = it }
+    remoteItems.forEach { result[key(it)] = it }
+    return result.values.toList()
+  }
 }
+
+private data class RemoteDelivery(
+  val event: TimelineEvent,
+  val notification: EsmeryNotification,
+)
 
 interface EsmeryRemoteDataSource {
   suspend fun fetchState(userId: String, email: String?, displayName: String?): EsmeryState?
@@ -308,13 +456,19 @@ class SupabaseEsmeryRemoteDataSource(
         filter { eq("sender_user_id", userId) }
       }.decodeList<FriendRequest>()
     }.getOrDefault(emptyList())
-    val receivedRequests = normalizedEmail?.takeIf { it.isNotBlank() }?.let { contact ->
+    val receivedByUserId = runCatching {
+      client.from("friend_requests").select {
+        filter { eq("receiver_user_id", userId) }
+      }.decodeList<FriendRequest>()
+    }.getOrDefault(emptyList())
+    val receivedByContact = normalizedEmail?.takeIf { it.isNotBlank() }?.let { contact ->
       runCatching {
         client.from("friend_requests").select {
           filter { ilike("receiver_contact", contact) }
         }.decodeList<FriendRequest>()
       }.getOrDefault(emptyList())
     }.orEmpty()
+    val receivedRequests = receivedByUserId + receivedByContact
 
     val subscription = runCatching {
       client.from("subscription_status").select {

@@ -127,6 +127,7 @@ private fun NotificationCard(notification: EsmeryNotification, onRead: () -> Uni
   InfoCard(
     icon = when (notification.type) {
       NotificationType.CheckInSuccess -> Icons.Rounded.Check
+      NotificationType.FriendRequest -> Icons.Rounded.Group
       NotificationType.GentleNudge -> Icons.Rounded.NotificationsActive
       NotificationType.MissedCheckIn -> Icons.Rounded.Warning
       NotificationType.EmergencyAlert -> Icons.Rounded.Warning
@@ -147,6 +148,7 @@ private fun NotificationCard(notification: EsmeryNotification, onRead: () -> Uni
 @Composable
 private fun notificationTitle(notification: EsmeryNotification): String = when (notification.title) {
   "Check-in sent" -> t("Check-in sent", "Đã gửi xác nhận an toàn")
+  "Circle invitation received" -> t("Circle invitation received", "Bạn nhận được lời mời vào vòng thân")
   "Gentle nudge sent" -> t("Gentle nudge sent", "Đã gửi nhắc nhở nhẹ")
   "Missed check-in detected" -> t("Missed check-in detected", "Phát hiện bỏ lỡ xác nhận")
   "Emergency alert sent" -> t("Emergency alert sent", "Đã gửi cảnh báo khẩn cấp")
@@ -158,6 +160,7 @@ private fun notificationTitle(notification: EsmeryNotification): String = when (
 @Composable
 private fun notificationBody(notification: EsmeryNotification): String = when (notification.body) {
   "Your circle has been notified that you are safe." -> t("Your circle has been notified that you are safe.", "Vòng thân đã được báo rằng bạn an toàn.")
+  "Open Circle to accept or decline this invitation." -> t("Open Circle to accept or decline this invitation.", "Mở Vòng thân để chấp nhận hoặc từ chối lời mời.")
   "A gentle reminder from your circle." -> t("A gentle reminder from your circle.", "Một nhắc nhở nhẹ từ vòng thân.")
   "Your safety rhythm needs attention." -> t("Your safety rhythm needs attention.", "Nhịp an toàn của bạn cần được chú ý.")
   else -> notification.body

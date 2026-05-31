@@ -37,6 +37,7 @@ enum class CircleStatus {
 data class FriendRequest(
   val id: String,
   @SerialName("sender_user_id") val senderUserId: String,
+  @SerialName("receiver_user_id") val receiverUserId: String? = null,
   @SerialName("receiver_contact") val receiverContact: String,
   val status: CircleStatus = CircleStatus.Pending,
   @SerialName("created_at") val createdAt: String,
@@ -88,6 +89,7 @@ data class EsmeryNotification(
 @Serializable
 enum class NotificationType {
   @SerialName("check_in_success") CheckInSuccess,
+  @SerialName("friend_request") FriendRequest,
   @SerialName("gentle_nudge") GentleNudge,
   @SerialName("missed_check_in") MissedCheckIn,
   @SerialName("emergency_alert") EmergencyAlert,

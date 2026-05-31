@@ -138,6 +138,45 @@ class EsmeryRepositoryTest {
   }
 
   @Test
+  fun checkInDeliversTimelineAndNotificationToAcceptedCircleMember() = runTest {
+    val remoteState = emptyStateFor("account-a", "a@example.com", "Account A").copy(
+      circleMembers = listOf(
+        CircleMember(
+          id = "member-b",
+          ownerUserId = "account-a",
+          memberUserId = "account-b",
+          invitedContact = "b@example.com",
+          name = "Account B",
+          relationship = "Trusted contact",
+          status = CircleStatus.Accepted,
+        ),
+      ),
+    )
+    val remote = FakeRemote(remoteState)
+    val repository = ResilientEsmeryRepository(remote = remote)
+
+    repository.loadForUser("account-a", "a@example.com", "Account A")
+    repository.checkIn()
+
+    assertTrue(remote.notifications.any { it.userId == "account-b" && it.type == NotificationType.CheckInSuccess })
+    assertTrue(remote.timelineEvents.any { it.userId == "account-b" })
+  }
+
+  @Test
+  fun refreshKeepsLocalTimelineWhenRemoteIsBehind() = runTest {
+    val remoteState = emptyStateFor("account-a", "a@example.com", "Account A")
+    val remote = FakeRemote(remoteState)
+    val repository = ResilientEsmeryRepository(remote = remote)
+
+    repository.loadForUser("account-a", "a@example.com", "Account A")
+    repository.checkIn()
+    repository.refresh()
+
+    assertTrue(repository.state.value.timelineEvents.any { it.title == "Check-in confirmed" })
+    assertTrue(repository.state.value.notifications.any { it.type == NotificationType.CheckInSuccess })
+  }
+
+  @Test
   fun acceptingReceivedRequestCreatesReciprocalCircleMember() = runTest {
     val request = FriendRequest(
       id = "request-a-to-b",
@@ -206,6 +245,7 @@ private class FakeRemote(
   val notifications = mutableListOf<EsmeryNotification>()
   val checkIns = mutableListOf<CheckIn>()
   val circleMembers = mutableListOf<CircleMember>()
+  val timelineEvents = mutableListOf<TimelineEvent>()
   var updatedCircleMemberUserId: String? = null
 
   override suspend fun fetchState(userId: String, email: String?, displayName: String?): EsmeryState? = remoteState
@@ -224,7 +264,9 @@ private class FakeRemote(
   override suspend fun insertCheckIn(checkIn: CheckIn) {
     checkIns += checkIn
   }
-  override suspend fun insertTimelineEvent(event: TimelineEvent) = Unit
+  override suspend fun insertTimelineEvent(event: TimelineEvent) {
+    timelineEvents += event
+  }
   override suspend fun insertNotification(notification: EsmeryNotification) {
     notifications += notification
   }
