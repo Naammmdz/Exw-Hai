@@ -47,13 +47,18 @@ import com.example.data.EsmeryState
 import com.example.ui.theme.Apricot
 import com.example.ui.theme.Cocoa
 import com.example.ui.theme.Taupe
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 @Composable
-fun CrisisScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (String) -> Unit) {
+fun CrisisScreen(
+  state: EsmeryState,
+  repository: EsmeryRepository,
+  onToast: (String) -> Unit,
+  actionScope: CoroutineScope = rememberCoroutineScope(),
+) {
   var showAdd by remember { mutableStateOf(false) }
   val context = LocalContext.current
-  val scope = rememberCoroutineScope()
   val language = LocalAppLanguage.current
   val unavailableMessage = t("Contact action is unavailable on this device.", "Thiết bị này không mở được thao tác liên hệ.")
   val savedMessage = t("Emergency contact saved.", "Đã lưu liên hệ khẩn cấp.")
@@ -61,7 +66,7 @@ fun CrisisScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Str
   ScreenList(title = appString(R.string.crisis), subtitle = t("Fast access to contacts and safe steps.", "Truy cập nhanh liên hệ và các bước an toàn.")) {
     item {
       PrimaryButton(text = t("Alert emergency contacts", "Cảnh báo liên hệ khẩn cấp"), icon = Icons.Rounded.Warning) {
-        scope.launch {
+        actionScope.launch {
           repository.triggerEmergencyAlert()
           onToast(alertMessage)
         }
@@ -110,7 +115,7 @@ fun CrisisScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Str
             Icon(Icons.Rounded.Call, contentDescription = null, tint = Cocoa)
           }
           IconButton(onClick = {
-            scope.launch { repository.deleteEmergencyContact(contact.id) }
+            actionScope.launch { repository.deleteEmergencyContact(contact.id) }
           }) {
             Icon(Icons.Rounded.Delete, contentDescription = null, tint = Taupe)
           }
@@ -120,7 +125,7 @@ fun CrisisScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Str
           Switch(
             checked = contact.isVerified,
             onCheckedChange = {
-              scope.launch { repository.toggleEmergencyContactVerified(contact.id) }
+              actionScope.launch { repository.toggleEmergencyContactVerified(contact.id) }
             },
           )
         }
@@ -129,7 +134,7 @@ fun CrisisScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Str
           Switch(
             checked = contact.autoNotify,
             onCheckedChange = {
-              scope.launch { repository.toggleEmergencyContactAutoNotify(contact.id) }
+              actionScope.launch { repository.toggleEmergencyContactAutoNotify(contact.id) }
             },
           )
         }
@@ -138,7 +143,7 @@ fun CrisisScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Str
   }
   if (showAdd) {
     EmergencyContactDialog(onDismiss = { showAdd = false }, onSave = { name, contact ->
-      scope.launch {
+      actionScope.launch {
         repository.saveEmergencyContact(EmergencyContact(id = "", userId = state.profile.id, name = name, contact = contact))
         showAdd = false
         onToast(savedMessage)

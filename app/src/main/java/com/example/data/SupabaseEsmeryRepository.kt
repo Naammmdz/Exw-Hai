@@ -1,18 +1,25 @@
 package com.example.data
 
+import android.util.Log
 import com.example.supabase
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+
+private const val TAG = "EsmeryRemote"
 
 class ResilientEsmeryRepository(
   private val local: InMemoryEsmeryRepository = InMemoryEsmeryRepository(),
   private val remote: EsmeryRemoteDataSource = SupabaseEsmeryRemoteDataSource(),
 ) : EsmeryRepository {
   override val state: StateFlow<EsmeryState> = local.state
+  private val refreshMutex = Mutex()
   private var userId: String? = null
   private var email: String? = null
   private var displayName: String? = null
@@ -26,22 +33,29 @@ class ResilientEsmeryRepository(
   }
 
   override suspend fun refresh() {
-    val id = userId ?: return
-    val remoteState = remote.tryFetchState(id, email, displayName)
-    if (remoteState != null) {
-      local.replaceState(mergeState(local.state.value, remoteState))
-      remote.tryRemote {
-        upsertProfile(local.state.value.profile)
-        upsertSubscription(local.state.value.subscriptionStatus)
-        upsertSafetySettings(local.state.value.safetySettings)
+    refreshMutex.withLock {
+      val id = userId ?: return
+      val currentEmail = email
+      val currentDisplayName = displayName
+      val remoteState = remote.tryFetchState(id, currentEmail, currentDisplayName)
+      if (id != userId) return
+      if (remoteState != null) {
+        local.replaceState(mergeState(local.state.value, remoteState))
+        remote.tryRemote {
+          upsertProfile(local.state.value.profile)
+          upsertSubscription(local.state.value.subscriptionStatus)
+          upsertSafetySettings(local.state.value.safetySettings)
+        }
+      } else {
+        remote.tryRemote {
+          upsertProfile(local.state.value.profile)
+          upsertSubscription(local.state.value.subscriptionStatus)
+          upsertSafetySettings(local.state.value.safetySettings)
+        }
+        remote.tryFetchState(id, currentEmail, currentDisplayName)?.let {
+          if (id == userId) local.replaceState(mergeState(local.state.value, it))
+        }
       }
-    } else {
-      remote.tryRemote {
-        upsertProfile(local.state.value.profile)
-        upsertSubscription(local.state.value.subscriptionStatus)
-        upsertSafetySettings(local.state.value.safetySettings)
-      }
-      remote.tryFetchState(id, email, displayName)?.let { local.replaceState(mergeState(local.state.value, it)) }
     }
   }
 
@@ -440,89 +454,118 @@ class SupabaseEsmeryRemoteDataSource(
 
   override suspend fun fetchState(userId: String, email: String?, displayName: String?): EsmeryState? {
     val normalizedEmail = email?.normalizedContact()
-    val profile = runCatching {
+    val profile = remoteOrNull("profiles current user") {
       client.from("profiles").select {
         filter { eq("id", userId) }
       }.decodeSingleOrNull<Profile>()
-    }.getOrNull()
+    }
     val resolvedProfile = profile ?: Profile(
       id = userId,
       displayName = displayName ?: normalizedEmail?.substringBefore('@') ?: "ESMERY Friend",
       email = normalizedEmail,
     )
 
-    val sentRequests = runCatching {
+    val sentRequests = remoteOrDefault("friend_requests sent", emptyList()) {
       client.from("friend_requests").select {
         filter { eq("sender_user_id", userId) }
       }.decodeList<FriendRequest>()
-    }.getOrDefault(emptyList())
-    val receivedByUserId = runCatching {
+    }
+    val receivedByUserId = remoteOrDefault("friend_requests received by user id", emptyList()) {
       client.from("friend_requests").select {
         filter { eq("receiver_user_id", userId) }
       }.decodeList<FriendRequest>()
-    }.getOrDefault(emptyList())
+    }
     val receivedByContact = normalizedEmail?.takeIf { it.isNotBlank() }?.let { contact ->
-      runCatching {
+      remoteOrDefault("friend_requests received by contact", emptyList()) {
         client.from("friend_requests").select {
           filter { ilike("receiver_contact", contact) }
         }.decodeList<FriendRequest>()
-      }.getOrDefault(emptyList())
+      }
     }.orEmpty()
     val receivedRequests = receivedByUserId + receivedByContact
 
-    val subscription = runCatching {
+    val subscription = remoteOrNull("subscription_status") {
       client.from("subscription_status").select {
         filter { eq("user_id", userId) }
       }.decodeSingleOrNull<SubscriptionStatus>()
-    }.getOrNull() ?: SubscriptionStatus(userId = userId)
+    } ?: SubscriptionStatus(userId = userId)
 
-    val settings = runCatching {
+    val settings = remoteOrNull("safety_settings") {
       client.from("safety_settings").select {
         filter { eq("user_id", userId) }
       }.decodeSingleOrNull<SafetySettings>()
-    }.getOrNull() ?: SafetySettings(userId = userId)
+    } ?: SafetySettings(userId = userId)
+
+    val ownedCircleMembers = remoteOrDefault("circle_members owned", emptyList()) {
+      client.from("circle_members").select {
+        filter { eq("owner_user_id", userId) }
+      }.decodeList<CircleMember>()
+    }
+    val memberCircleRows = remoteOrDefault("circle_members received", emptyList()) {
+      client.from("circle_members").select {
+        filter { eq("member_user_id", userId) }
+      }.decodeList<CircleMember>()
+    }
+    val receivedCircleMembers = memberCircleRows
+      .filter { it.ownerUserId != userId && it.status == CircleStatus.Accepted }
+      .map { row ->
+        val ownerProfile = remoteOrNull("profiles circle owner ${row.ownerUserId}") {
+          client.from("profiles").select {
+            filter { eq("id", row.ownerUserId) }
+          }.decodeSingleOrNull<Profile>()
+        }
+        CircleMember(
+          id = row.id,
+          ownerUserId = userId,
+          memberUserId = row.ownerUserId,
+          invitedContact = ownerProfile?.email ?: row.ownerUserId,
+          name = ownerProfile?.displayName ?: row.name,
+          relationship = row.relationship,
+          status = row.status,
+          lastSafeAt = ownerProfile?.lastSafeAt ?: row.lastSafeAt,
+        )
+      }
+    val circleMembers = (ownedCircleMembers + receivedCircleMembers)
+      .distinctBy { it.memberUserId ?: it.invitedContact }
+      .sortedByDescending { it.lastSafeAt.orEmpty() }
 
     return EsmeryState(
       profile = resolvedProfile.copy(
         displayName = resolvedProfile.displayName.ifBlank { displayName ?: "ESMERY Friend" },
         email = resolvedProfile.email?.normalizedContact() ?: normalizedEmail,
       ),
-      circleMembers = runCatching {
-        client.from("circle_members").select {
-          filter { eq("owner_user_id", userId) }
-        }.decodeList<CircleMember>()
-      }.getOrDefault(emptyList()).sortedByDescending { it.lastSafeAt.orEmpty() },
+      circleMembers = circleMembers,
       friendRequests = (sentRequests + receivedRequests).distinctBy { it.id }.sortedByDescending { it.createdAt },
-      checkIns = runCatching {
+      checkIns = remoteOrDefault("check_ins", emptyList()) {
         client.from("check_ins").select {
           filter { eq("user_id", userId) }
         }.decodeList<CheckIn>()
-      }.getOrDefault(emptyList()).sortedByDescending { it.createdAt },
-      timelineEvents = runCatching {
+      }.sortedByDescending { it.createdAt },
+      timelineEvents = remoteOrDefault("timeline_events", emptyList()) {
         client.from("timeline_events").select {
           filter { eq("user_id", userId) }
         }.decodeList<TimelineEvent>()
-      }.getOrDefault(emptyList()).sortedByDescending { it.createdAt },
-      notifications = runCatching {
+      }.sortedByDescending { it.createdAt },
+      notifications = remoteOrDefault("notifications", emptyList()) {
         client.from("notifications").select {
           filter { eq("user_id", userId) }
         }.decodeList<EsmeryNotification>()
-      }.getOrDefault(emptyList()).sortedByDescending { it.createdAt },
-      moments = runCatching {
+      }.sortedByDescending { it.createdAt },
+      moments = remoteOrDefault("moments", emptyList()) {
         client.from("moments").select {
           filter { eq("user_id", userId) }
         }.decodeList<Moment>()
-      }.getOrDefault(emptyList()).sortedByDescending { it.createdAt },
-      emergencyContacts = runCatching {
+      }.sortedByDescending { it.createdAt },
+      emergencyContacts = remoteOrDefault("emergency_contacts", emptyList()) {
         client.from("emergency_contacts").select {
           filter { eq("user_id", userId) }
         }.decodeList<EmergencyContact>()
-      }.getOrDefault(emptyList()).sortedBy { it.name },
-      safetyRhythms = runCatching {
+      }.sortedBy { it.name },
+      safetyRhythms = remoteOrDefault("safety_rhythms", emptyList()) {
         client.from("safety_rhythms").select {
           filter { eq("user_id", userId) }
         }.decodeList<SafetyRhythm>()
-      }.getOrDefault(emptyList()).sortedBy { it.checkTime },
+      }.sortedBy { it.checkTime },
       safetySettings = settings,
       subscriptionStatus = subscription,
     )
@@ -610,20 +653,65 @@ class SupabaseEsmeryRemoteDataSource(
 }
 
 private suspend fun EsmeryRemoteDataSource.tryRemote(block: suspend EsmeryRemoteDataSource.() -> Unit) {
-  runCatching { block() }
+  try {
+    block()
+  } catch (error: CancellationException) {
+    throw error
+  } catch (error: Throwable) {
+    Log.e(TAG, "Remote write failed", error)
+  }
 }
 
 private suspend fun EsmeryRemoteDataSource.tryFetchState(
   userId: String,
   email: String?,
   displayName: String?,
-): EsmeryState? = runCatching { fetchState(userId, email, displayName) }.getOrNull()
+): EsmeryState? = try {
+  fetchState(userId, email, displayName)
+} catch (error: CancellationException) {
+  throw error
+} catch (error: Throwable) {
+  Log.e(TAG, "Remote fetch failed for $userId", error)
+  null
+}
 
-private suspend fun EsmeryRemoteDataSource.tryFindProfileByContact(contact: String): Profile? =
-  runCatching { findProfileByContact(contact) }.getOrNull()
+private suspend fun EsmeryRemoteDataSource.tryFindProfileByContact(contact: String): Profile? = try {
+  findProfileByContact(contact)
+} catch (error: CancellationException) {
+  throw error
+} catch (error: Throwable) {
+  Log.e(TAG, "Profile lookup failed for contact=$contact", error)
+  null
+}
 
-private suspend fun EsmeryRemoteDataSource.tryFindProfileById(userId: String): Profile? =
-  runCatching { findProfileById(userId) }.getOrNull()
+private suspend fun EsmeryRemoteDataSource.tryFindProfileById(userId: String): Profile? = try {
+  findProfileById(userId)
+} catch (error: CancellationException) {
+  throw error
+} catch (error: Throwable) {
+  Log.e(TAG, "Profile lookup failed for userId=$userId", error)
+  null
+}
+
+private suspend inline fun <T> remoteOrDefault(label: String, default: T, block: suspend () -> T): T =
+  try {
+    block()
+  } catch (error: CancellationException) {
+    throw error
+  } catch (error: Throwable) {
+    Log.e(TAG, "Remote read failed: $label", error)
+    default
+  }
+
+private suspend inline fun <T> remoteOrNull(label: String, block: suspend () -> T?): T? =
+  try {
+    block()
+  } catch (error: CancellationException) {
+    throw error
+  } catch (error: Throwable) {
+    Log.e(TAG, "Remote read failed: $label", error)
+    null
+  }
 
 @Serializable
 private data class LastSafeAtUpdate(

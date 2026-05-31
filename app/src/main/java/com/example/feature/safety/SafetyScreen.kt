@@ -36,14 +36,19 @@ import com.example.data.SafetyRhythm
 import com.example.data.SafetySettings
 import com.example.ui.theme.Cocoa
 import com.example.ui.theme.Taupe
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 @Composable
-fun SafetyScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (String) -> Unit) {
+fun SafetyScreen(
+  state: EsmeryState,
+  repository: EsmeryRepository,
+  onToast: (String) -> Unit,
+  actionScope: CoroutineScope = rememberCoroutineScope(),
+) {
   var label by remember { mutableStateOf("") }
   var time by remember { mutableStateOf("") }
   var editingId by remember { mutableStateOf<String?>(null) }
-  val scope = rememberCoroutineScope()
   val savedMessage = t("Safety rhythm saved.", "Đã lưu nhịp an toàn.")
   val settingsSavedMessage = t("Safety settings saved.", "Đã lưu cài đặt an toàn.")
   ScreenList(title = appString(R.string.safety_rhythm), subtitle = t("Daily reminders and missed-check detection for your private safety rhythm.", "Nhắc hằng ngày và phát hiện bỏ lỡ xác nhận theo nhịp an toàn riêng tư.")) {
@@ -53,7 +58,7 @@ fun SafetyScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Str
         EsmeryTextField(value = time, onValueChange = { time = it }, label = t("Time, e.g. 18:00", "Thời gian, ví dụ 18:00"))
         PrimaryButton(text = t("Save rhythm", "Lưu nhịp an toàn")) {
           if (label.isNotBlank() && time.isNotBlank()) {
-            scope.launch {
+            actionScope.launch {
               repository.saveSafetyRhythm(SafetyRhythm(id = editingId.orEmpty(), userId = state.profile.id, label = label, checkTime = time))
               editingId = null
               label = ""
@@ -68,7 +73,7 @@ fun SafetyScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Str
       SafetySettingsCard(
         settings = state.safetySettings,
         onSave = { settings ->
-          scope.launch {
+          actionScope.launch {
             repository.updateSafetySettings(settings)
             onToast(settingsSavedMessage)
           }
@@ -86,7 +91,7 @@ fun SafetyScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Str
           Switch(
             checked = rhythm.isEnabled,
             onCheckedChange = {
-              scope.launch { repository.toggleSafetyRhythm(rhythm.id) }
+              actionScope.launch { repository.toggleSafetyRhythm(rhythm.id) }
             },
           )
           IconButton(onClick = {
@@ -97,7 +102,7 @@ fun SafetyScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Str
             Icon(Icons.Rounded.Edit, contentDescription = null, tint = Cocoa)
           }
           IconButton(onClick = {
-            scope.launch { repository.deleteSafetyRhythm(rhythm.id) }
+            actionScope.launch { repository.deleteSafetyRhythm(rhythm.id) }
           }) {
             Icon(Icons.Rounded.Delete, contentDescription = null, tint = Taupe)
           }

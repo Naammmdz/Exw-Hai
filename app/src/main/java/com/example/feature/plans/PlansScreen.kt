@@ -30,11 +30,16 @@ import com.example.ui.theme.Apricot
 import com.example.ui.theme.Cocoa
 import com.example.ui.theme.Sage
 import com.example.ui.theme.Taupe
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 @Composable
-fun PlansScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (String) -> Unit) {
-  val scope = rememberCoroutineScope()
+fun PlansScreen(
+  state: EsmeryState,
+  repository: EsmeryRepository,
+  onToast: (String) -> Unit,
+  actionScope: CoroutineScope = rememberCoroutineScope(),
+) {
   val basicSelected = t("Basic Care selected.", "Đã chọn gói Chăm sóc cơ bản.")
   val monthlySelected = t("Monthly plan selected.", "Đã chọn gói tháng.")
   val yearlySelected = t("Yearly plan selected.", "Đã chọn gói năm.")
@@ -45,7 +50,7 @@ fun PlansScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Stri
         t("Free - manual daily check-in, 1 family notification.", "Miễn phí - check-in thủ công hằng ngày, thông báo cho 1 người thân."),
         state.subscriptionStatus.plan == SubscriptionPlan.Basic,
       ) {
-        scope.launch { repository.updateSubscription(SubscriptionPlan.Basic); onToast(basicSelected) }
+        actionScope.launch { repository.updateSubscription(SubscriptionPlan.Basic); onToast(basicSelected) }
       }
     }
     item {
@@ -54,7 +59,7 @@ fun PlansScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Stri
         t("49,000 VND/month - smart inactivity detection and unlimited contacts.", "49.000 VND/tháng - phát hiện không hoạt động thông minh và không giới hạn liên hệ."),
         state.subscriptionStatus.plan == SubscriptionPlan.Monthly,
       ) {
-        scope.launch { repository.updateSubscription(SubscriptionPlan.Monthly); onToast(monthlySelected) }
+        actionScope.launch { repository.updateSubscription(SubscriptionPlan.Monthly); onToast(monthlySelected) }
       }
     }
     item {
@@ -63,7 +68,7 @@ fun PlansScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Stri
         t("499,000 VND/year - monthly features plus priority support.", "499.000 VND/năm - gồm tính năng gói tháng và hỗ trợ ưu tiên."),
         state.subscriptionStatus.plan == SubscriptionPlan.Yearly,
       ) {
-        scope.launch { repository.updateSubscription(SubscriptionPlan.Yearly); onToast(yearlySelected) }
+        actionScope.launch { repository.updateSubscription(SubscriptionPlan.Yearly); onToast(yearlySelected) }
       }
     }
   }

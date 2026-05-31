@@ -38,12 +38,17 @@ import com.example.data.EsmeryRepository
 import com.example.data.Moment
 import com.example.data.PRESET_IMAGES
 import com.example.ui.theme.Cocoa
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 @Composable
-fun MomentsScreen(moments: List<Moment>, repository: EsmeryRepository, onToast: (String) -> Unit) {
+fun MomentsScreen(
+  moments: List<Moment>,
+  repository: EsmeryRepository,
+  onToast: (String) -> Unit,
+  actionScope: CoroutineScope = rememberCoroutineScope(),
+) {
   var showAdd by remember { mutableStateOf(false) }
-  val scope = rememberCoroutineScope()
   val sharedMessage = t("Moment shared.", "Đã chia sẻ khoảnh khắc.")
   ScreenList(title = appString(R.string.moments), subtitle = t("Small updates for the people who care.", "Những cập nhật nhỏ dành cho người quan tâm bạn.")) {
     item { PrimaryButton(text = appString(R.string.share_moment), icon = Icons.Rounded.Add) { showAdd = true } }
@@ -69,7 +74,7 @@ fun MomentsScreen(moments: List<Moment>, repository: EsmeryRepository, onToast: 
   }
   if (showAdd) {
     MomentDialog(onDismiss = { showAdd = false }, onShare = { caption, image ->
-      scope.launch {
+      actionScope.launch {
         repository.shareMoment(caption, image)
         showAdd = false
         onToast(sharedMessage)

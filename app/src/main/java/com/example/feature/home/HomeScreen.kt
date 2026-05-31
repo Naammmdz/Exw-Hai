@@ -94,13 +94,7 @@ fun HomeScreen(
   }
 
   LaunchedEffect(state.profile.id, state.profile.lastSafeAt, state.safetySettings) {
-    repository.evaluateMissedCheckIns()
-  }
-
-  LaunchedEffect(selectedTab) {
-    if (selectedTab == MainTab.Circle) {
-      repository.refresh()
-    }
+    scope.launch { repository.evaluateMissedCheckIns() }
   }
 
   Scaffold(
@@ -113,7 +107,14 @@ fun HomeScreen(
           horizontalArrangement = Arrangement.SpaceAround,
         ) {
           MainTab.entries.forEach { tab ->
-            TabButton(tab = tab, selected = selectedTab == tab, onClick = { selectedTab = tab })
+            TabButton(
+              tab = tab,
+              selected = selectedTab == tab,
+              onClick = {
+                selectedTab = tab
+                scope.launch { repository.refresh() }
+              },
+            )
           }
         }
       }
@@ -148,12 +149,12 @@ fun HomeScreen(
           },
         )
 
-        MainTab.Circle -> CircleScreen(state, repository, onToast = { toast = it })
+        MainTab.Circle -> CircleScreen(state, repository, onToast = { toast = it }, actionScope = scope)
         MainTab.Timeline -> TimelineScreen(state.timelineEvents)
-        MainTab.Moments -> MomentsScreen(state.moments, repository, onToast = { toast = it })
-        MainTab.Safety -> SafetyScreen(state, repository, onToast = { toast = it })
-        MainTab.Crisis -> CrisisScreen(state, repository, onToast = { toast = it })
-        MainTab.Plans -> PlansScreen(state, repository, onToast = { toast = it })
+        MainTab.Moments -> MomentsScreen(state.moments, repository, onToast = { toast = it }, actionScope = scope)
+        MainTab.Safety -> SafetyScreen(state, repository, onToast = { toast = it }, actionScope = scope)
+        MainTab.Crisis -> CrisisScreen(state, repository, onToast = { toast = it }, actionScope = scope)
+        MainTab.Plans -> PlansScreen(state, repository, onToast = { toast = it }, actionScope = scope)
       }
 
       toast?.let {

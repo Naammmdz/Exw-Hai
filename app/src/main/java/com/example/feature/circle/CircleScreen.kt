@@ -56,12 +56,17 @@ import com.example.ui.theme.Apricot
 import com.example.ui.theme.Cocoa
 import com.example.ui.theme.Sage
 import com.example.ui.theme.Taupe
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 @Composable
-fun CircleScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (String) -> Unit) {
+fun CircleScreen(
+  state: EsmeryState,
+  repository: EsmeryRepository,
+  onToast: (String) -> Unit,
+  actionScope: CoroutineScope = rememberCoroutineScope(),
+) {
   var showAdd by remember { mutableStateOf(false) }
-  val scope = rememberCoroutineScope()
   val language = LocalAppLanguage.current
   val acceptedMessage = t("Friend request accepted.", "Đã chấp nhận lời mời.")
   val declinedMessage = t("Friend request declined.", "Đã từ chối lời mời.")
@@ -75,7 +80,7 @@ fun CircleScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Str
     item {
       OutlinedButton(
         onClick = {
-          scope.launch {
+          actionScope.launch {
             repository.refresh()
             onToast(refreshedMessage)
           }
@@ -103,13 +108,13 @@ fun CircleScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Str
         request = request,
         currentUserId = state.profile.id,
         onAccept = {
-          scope.launch {
+          actionScope.launch {
             repository.updateFriendRequest(request.id, CircleStatus.Accepted)
             onToast(acceptedMessage)
           }
         },
         onDecline = {
-          scope.launch {
+          actionScope.launch {
             repository.updateFriendRequest(request.id, CircleStatus.Declined)
             onToast(declinedMessage)
           }
@@ -118,7 +123,7 @@ fun CircleScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Str
     }
     items(state.circleMembers) { member ->
       CircleMemberCard(member, onNudge = {
-        scope.launch {
+        actionScope.launch {
           repository.sendNudge(member.id)
           onToast(tr(language, "Gentle nudge sent to ${member.name}.", "Đã gửi nhắc nhở nhẹ nhàng cho ${member.name}."))
         }
@@ -128,7 +133,7 @@ fun CircleScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Str
 
   if (showAdd) {
     AddFriendDialog(onDismiss = { showAdd = false }, onAdd = { contact, name, relationship ->
-      scope.launch {
+      actionScope.launch {
         repository.addFriendRequest(contact, name, relationship)
         showAdd = false
         onToast(invitationSentMessage)
