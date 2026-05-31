@@ -38,7 +38,7 @@ fun PlansScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Stri
   val basicSelected = t("Basic Care selected.", "Đã chọn gói Chăm sóc cơ bản.")
   val monthlySelected = t("Monthly plan selected.", "Đã chọn gói tháng.")
   val yearlySelected = t("Yearly plan selected.", "Đã chọn gói năm.")
-  ScreenList(title = appString(R.string.plans), subtitle = t("Checkout is a functional stub in v1.", "Thanh toán đang được mô phỏng ở bản v1.")) {
+  ScreenList(title = appString(R.string.plans), subtitle = t("Choose the care level for this MVP. Secure checkout can be connected later.", "Chọn mức chăm sóc cho MVP. Thanh toán bảo mật có thể nối ở phase sau.")) {
     item {
       PlanCard(
         t("Basic Care", "Chăm sóc cơ bản"),

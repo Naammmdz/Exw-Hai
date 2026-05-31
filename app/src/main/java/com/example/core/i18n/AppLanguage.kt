@@ -73,9 +73,12 @@ fun localizedEventText(value: String): String = when (value) {
   "Moment shared" -> t("Moment shared", "Đã chia sẻ khoảnh khắc")
   "Emergency contact saved" -> t("Emergency contact saved", "Đã lưu liên hệ khẩn cấp")
   "Safety rhythm updated" -> t("Safety rhythm updated", "Đã cập nhật nhịp an toàn")
+  "Missed check-in detected" -> t("Missed check-in detected", "Phát hiện bỏ lỡ xác nhận")
+  "Emergency alert sent" -> t("Emergency alert sent", "Đã gửi cảnh báo khẩn cấp")
   "Morning check-in" -> t("Morning check-in", "Xác nhận an toàn buổi sáng")
   "Automatic safety heartbeat sent." -> t("Automatic safety heartbeat sent.", "Tín hiệu an toàn tự động đã được gửi.")
   "Morning coffee ritual" -> t("Morning coffee ritual", "Thói quen cà phê sáng")
+  "Your safety rhythm needs attention." -> t("Your safety rhythm needs attention.", "Nhịp an toàn của bạn cần được chú ý.")
   else -> value
 }
 

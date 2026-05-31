@@ -3,7 +3,10 @@ package com.example.feature.moments
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.LocalFlorist
@@ -19,13 +22,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import com.example.R
 import com.example.core.i18n.appString
 import com.example.core.i18n.friendlyTimeText
 import com.example.core.i18n.localizedEventText
 import com.example.core.i18n.t
+import com.example.core.ui.CardBlock
 import com.example.core.ui.EsmeryTextField
-import com.example.core.ui.InfoCard
 import com.example.core.ui.PrimaryButton
 import com.example.core.ui.ScreenList
 import com.example.data.EsmeryRepository
@@ -42,11 +48,23 @@ fun MomentsScreen(moments: List<Moment>, repository: EsmeryRepository, onToast: 
   ScreenList(title = appString(R.string.moments), subtitle = t("Small updates for the people who care.", "Những cập nhật nhỏ dành cho người quan tâm bạn.")) {
     item { PrimaryButton(text = appString(R.string.share_moment), icon = Icons.Rounded.Add) { showAdd = true } }
     items(moments) { moment ->
-      InfoCard(
-        icon = Icons.Rounded.LocalFlorist,
-        title = localizedEventText(moment.caption),
-        body = t("Shared to circle - ${friendlyTimeText(moment.createdAt)}", "Đã chia sẻ với vòng thân - ${friendlyTimeText(moment.createdAt)}"),
-      )
+      CardBlock {
+        AsyncImage(
+          model = moment.imageUrl,
+          contentDescription = null,
+          modifier = Modifier
+            .fillMaxWidth()
+            .height(150.dp),
+          contentScale = ContentScale.Crop,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          androidx.compose.material3.Icon(Icons.Rounded.LocalFlorist, contentDescription = null, tint = Cocoa)
+          Column {
+            Text(localizedEventText(moment.caption), color = Cocoa, fontWeight = androidx.compose.ui.text.font.FontWeight.Black)
+            Text(t("Shared to circle - ${friendlyTimeText(moment.createdAt)}", "Đã chia sẻ với vòng thân - ${friendlyTimeText(moment.createdAt)}"))
+          }
+        }
+      }
     }
   }
   if (showAdd) {

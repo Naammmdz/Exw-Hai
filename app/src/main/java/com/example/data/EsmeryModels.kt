@@ -69,7 +69,29 @@ enum class TimelineEventType {
   @SerialName("nudge") Nudge,
   @SerialName("friend_request") FriendRequest,
   @SerialName("safety_rhythm") SafetyRhythm,
+  @SerialName("missed_check_in") MissedCheckIn,
   @SerialName("emergency") Emergency,
+}
+
+@Serializable
+data class EsmeryNotification(
+  val id: String,
+  @SerialName("user_id") val userId: String,
+  val type: NotificationType,
+  val title: String,
+  val body: String,
+  @SerialName("related_entity_id") val relatedEntityId: String? = null,
+  @SerialName("is_read") val isRead: Boolean = false,
+  @SerialName("created_at") val createdAt: String,
+)
+
+@Serializable
+enum class NotificationType {
+  @SerialName("check_in_success") CheckInSuccess,
+  @SerialName("gentle_nudge") GentleNudge,
+  @SerialName("missed_check_in") MissedCheckIn,
+  @SerialName("emergency_alert") EmergencyAlert,
+  @SerialName("moment_shared") MomentShared,
 }
 
 @Serializable
@@ -102,6 +124,14 @@ data class SafetyRhythm(
 )
 
 @Serializable
+data class SafetySettings(
+  @SerialName("user_id") val userId: String,
+  @SerialName("inactivity_hours") val inactivityHours: Int = 4,
+  @SerialName("escalation_delay_minutes") val escalationDelayMinutes: Int = 30,
+  @SerialName("location_sharing_enabled") val locationSharingEnabled: Boolean = false,
+)
+
+@Serializable
 data class SubscriptionStatus(
   @SerialName("user_id") val userId: String,
   val plan: SubscriptionPlan = SubscriptionPlan.Basic,
@@ -121,8 +151,10 @@ data class EsmeryState(
   val friendRequests: List<FriendRequest>,
   val checkIns: List<CheckIn>,
   val timelineEvents: List<TimelineEvent>,
+  val notifications: List<EsmeryNotification>,
   val moments: List<Moment>,
   val emergencyContacts: List<EmergencyContact>,
   val safetyRhythms: List<SafetyRhythm>,
+  val safetySettings: SafetySettings,
   val subscriptionStatus: SubscriptionStatus,
 )

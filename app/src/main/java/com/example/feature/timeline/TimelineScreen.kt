@@ -39,5 +39,6 @@ private fun TimelineEventType.icon(): ImageVector = when (this) {
   TimelineEventType.Nudge -> Icons.Rounded.NotificationsActive
   TimelineEventType.FriendRequest -> Icons.Rounded.Group
   TimelineEventType.SafetyRhythm -> Icons.Rounded.Schedule
+  TimelineEventType.MissedCheckIn -> Icons.Rounded.Warning
   TimelineEventType.Emergency -> Icons.Rounded.Warning
 }

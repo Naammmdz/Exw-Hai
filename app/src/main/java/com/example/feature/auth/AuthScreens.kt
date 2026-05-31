@@ -71,7 +71,20 @@ fun WelcomeScreen(
     BrandHeader(title = appString(R.string.welcome_title), subtitle = appString(R.string.welcome_subtitle))
     EsmeryTextField(value = email, onValueChange = { email = it }, label = appString(R.string.email), keyboardType = KeyboardType.Email)
     EsmeryTextField(value = password, onValueChange = { password = it }, label = appString(R.string.password), keyboardType = KeyboardType.Password, password = true)
-    TextButton(onClick = { message = if (isEnglish) "Password reset email is a v1 stub." else "Email đặt lại mật khẩu là mô phỏng ở bản v1." }, modifier = Modifier.align(Alignment.End)) {
+    TextButton(
+      onClick = {
+        if (email.isBlank()) {
+          message = if (isEnglish) "Enter your email first." else "Nhập email trước."
+          return@TextButton
+        }
+        scope.launch {
+          runCatching { authGateway.resetPassword(email.trim()) }
+            .onSuccess { message = if (isEnglish) "Password reset email sent." else "Đã gửi email đặt lại mật khẩu." }
+            .onFailure { message = it.message ?: if (isEnglish) "Password reset failed." else "Không gửi được email đặt lại mật khẩu." }
+        }
+      },
+      modifier = Modifier.align(Alignment.End),
+    ) {
       Text(appString(R.string.forgot_password), color = Cocoa)
     }
     message?.let { InlineMessage(it) }

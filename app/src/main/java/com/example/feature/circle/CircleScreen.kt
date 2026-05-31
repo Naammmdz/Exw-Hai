@@ -13,8 +13,11 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Group
+import androidx.compose.material.icons.rounded.PersonSearch
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
@@ -41,6 +44,7 @@ import com.example.core.i18n.t
 import com.example.core.i18n.tr
 import com.example.core.ui.CardBlock
 import com.example.core.ui.EsmeryTextField
+import com.example.core.ui.InfoCard
 import com.example.core.ui.PrimaryButton
 import com.example.core.ui.ScreenList
 import com.example.data.CircleMember
@@ -62,14 +66,42 @@ fun CircleScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Str
   val acceptedMessage = t("Friend request accepted.", "Đã chấp nhận lời mời.")
   val declinedMessage = t("Friend request declined.", "Đã từ chối lời mời.")
   val invitationSentMessage = t("Invitation sent.", "Đã gửi lời mời.")
+  val refreshedMessage = t("Circle updated.", "Đã cập nhật vòng thân.")
 
   ScreenList(title = appString(R.string.circle), subtitle = t("Trusted people who can receive safety alerts.", "Những người tin cậy có thể nhận cảnh báo an toàn.")) {
     item {
       PrimaryButton(text = appString(R.string.add_friend), icon = Icons.Rounded.Add) { showAdd = true }
     }
+    item {
+      OutlinedButton(
+        onClick = {
+          scope.launch {
+            repository.refresh()
+            onToast(refreshedMessage)
+          }
+        },
+        shape = RoundedCornerShape(8.dp),
+      ) {
+        Icon(Icons.Rounded.Refresh, contentDescription = null, tint = Cocoa)
+        Text(t("Refresh Circle", "Cập nhật Vòng thân"), color = Cocoa)
+      }
+    }
+    if (state.friendRequests.isEmpty() && state.circleMembers.isEmpty()) {
+      item {
+        InfoCard(
+          icon = Icons.Rounded.PersonSearch,
+          title = t("No trusted people yet", "Chưa có người tin cậy"),
+          body = t(
+            "Add a real email, phone, or friend ID to start your Circle.",
+            "Thêm email, số điện thoại hoặc ID thật để bắt đầu Vòng thân.",
+          ),
+        )
+      }
+    }
     items(state.friendRequests) { request ->
       FriendRequestCard(
         request = request,
+        currentUserId = state.profile.id,
         onAccept = {
           scope.launch {
             repository.updateFriendRequest(request.id, CircleStatus.Accepted)
@@ -124,18 +156,43 @@ private fun CircleMemberCard(member: CircleMember, onNudge: () -> Unit) {
 }
 
 @Composable
-private fun FriendRequestCard(request: FriendRequest, onAccept: () -> Unit, onDecline: () -> Unit) {
+private fun FriendRequestCard(
+  request: FriendRequest,
+  currentUserId: String,
+  onAccept: () -> Unit,
+  onDecline: () -> Unit,
+) {
+  val isReceivedRequest = request.senderUserId != currentUserId
   CardBlock {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
       Icon(Icons.Rounded.Group, contentDescription = null, tint = Apricot)
       Column(modifier = Modifier.weight(1f)) {
-        Text(t("Pending request", "Lời mời đang chờ"), color = Cocoa, fontWeight = FontWeight.Bold)
-        Text(request.receiverContact, color = Taupe)
+        Text(
+          if (isReceivedRequest) t("Incoming request", "Lời mời nhận được") else t("Sent request", "Lời mời đã gửi"),
+          color = Cocoa,
+          fontWeight = FontWeight.Bold,
+        )
+        Text(
+          if (isReceivedRequest) {
+            t("From ${request.senderUserId.take(8)} - ${localizedCircleStatus(request.status)}", "Từ ${request.senderUserId.take(8)} - ${localizedCircleStatus(request.status)}")
+          } else {
+            "${request.receiverContact} - ${localizedCircleStatus(request.status)}"
+          },
+          color = Taupe,
+        )
       }
-      IconButton(onClick = onAccept) { Icon(Icons.Rounded.Check, contentDescription = null, tint = Cocoa) }
-      IconButton(onClick = onDecline) { Icon(Icons.Rounded.Close, contentDescription = null, tint = Taupe) }
+      if (request.status == CircleStatus.Pending && isReceivedRequest) {
+        IconButton(onClick = onAccept) { Icon(Icons.Rounded.Check, contentDescription = null, tint = Cocoa) }
+        IconButton(onClick = onDecline) { Icon(Icons.Rounded.Close, contentDescription = null, tint = Taupe) }
+      }
     }
   }
+}
+
+private enum class AddFriendMode {
+  Contact,
+  Id,
+  Qr,
 }
 
 @Composable
@@ -143,12 +200,29 @@ private fun AddFriendDialog(onDismiss: () -> Unit, onAdd: (String, String, Strin
   var contact by remember { mutableStateOf("") }
   var name by remember { mutableStateOf("") }
   var relationship by remember { mutableStateOf("") }
+  var mode by remember { mutableStateOf(AddFriendMode.Contact) }
   AlertDialog(
     onDismissRequest = onDismiss,
     title = { Text(appString(R.string.add_friend), color = Cocoa, fontWeight = FontWeight.Black) },
     text = {
       Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        EsmeryTextField(contact, { contact = it }, t("Email, phone, or ID", "Email, số điện thoại hoặc ID"))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          FilterChip(selected = mode == AddFriendMode.Contact, onClick = { mode = AddFriendMode.Contact }, label = { Text(t("Contact", "Liên hệ")) })
+          FilterChip(selected = mode == AddFriendMode.Id, onClick = { mode = AddFriendMode.Id }, label = { Text("ID") })
+          FilterChip(selected = mode == AddFriendMode.Qr, onClick = { mode = AddFriendMode.Qr }, label = { Text("QR") })
+        }
+        EsmeryTextField(
+          contact,
+          { contact = it },
+          when (mode) {
+            AddFriendMode.Contact -> t("Email or phone", "Email hoặc số điện thoại")
+            AddFriendMode.Id -> t("Friend ID", "ID bạn bè")
+            AddFriendMode.Qr -> t("QR result", "Kết quả QR")
+          },
+        )
+        if (mode == AddFriendMode.Qr) {
+          Text(t("QR scanner can be connected here; paste a scanned code for MVP.", "Có thể nối máy quét QR tại đây; MVP dùng cách dán mã đã quét."), color = Taupe)
+        }
         EsmeryTextField(name, { name = it }, t("Name", "Tên"))
         EsmeryTextField(relationship, { relationship = it }, t("Relationship", "Mối quan hệ"))
       }

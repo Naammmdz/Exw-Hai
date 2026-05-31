@@ -93,6 +93,16 @@ fun HomeScreen(
     }
   }
 
+  LaunchedEffect(state.profile.id, state.profile.lastSafeAt, state.safetySettings) {
+    repository.evaluateMissedCheckIns()
+  }
+
+  LaunchedEffect(selectedTab) {
+    if (selectedTab == MainTab.Circle) {
+      repository.refresh()
+    }
+  }
+
   Scaffold(
     bottomBar = {
       Surface(color = Surface, shadowElevation = 8.dp) {
@@ -132,6 +142,9 @@ fun HomeScreen(
               authGateway.signOut()
               onSignedOut()
             }
+          },
+          onNotificationRead = { notificationId ->
+            scope.launch { repository.markNotificationRead(notificationId) }
           },
         )
 

@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Call
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Warning
@@ -16,6 +17,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -55,7 +57,16 @@ fun CrisisScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Str
   val language = LocalAppLanguage.current
   val unavailableMessage = t("Contact action is unavailable on this device.", "Thiết bị này không mở được thao tác liên hệ.")
   val savedMessage = t("Emergency contact saved.", "Đã lưu liên hệ khẩn cấp.")
+  val alertMessage = t("Emergency alert recorded for enabled contacts.", "Đã ghi nhận cảnh báo khẩn cấp cho liên hệ đang bật.")
   ScreenList(title = appString(R.string.crisis), subtitle = t("Fast access to contacts and safe steps.", "Truy cập nhanh liên hệ và các bước an toàn.")) {
+    item {
+      PrimaryButton(text = t("Alert emergency contacts", "Cảnh báo liên hệ khẩn cấp"), icon = Icons.Rounded.Warning) {
+        scope.launch {
+          repository.triggerEmergencyAlert()
+          onToast(alertMessage)
+        }
+      }
+    }
     item { PrimaryButton(text = t("Add emergency contact", "Thêm liên hệ khẩn cấp"), icon = Icons.Rounded.Add) { showAdd = true } }
     item {
       InfoCard(
@@ -71,7 +82,14 @@ fun CrisisScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Str
       InfoCard(
         icon = Icons.Rounded.Warning,
         title = t("Local support", "Hỗ trợ địa phương"),
-        body = t("Nearby police stations and hospitals are placeholders in v1.", "Đồn công an và bệnh viện gần đây là dữ liệu mô phỏng ở bản v1."),
+        body = t("Call local emergency services, nearest police station, or hospital when immediate help is needed.", "Gọi dịch vụ khẩn cấp địa phương, đồn công an hoặc bệnh viện gần nhất khi cần hỗ trợ ngay."),
+      )
+    }
+    item {
+      InfoCard(
+        icon = Icons.Rounded.Phone,
+        title = t("Vietnam emergency numbers", "Số khẩn cấp tại Việt Nam"),
+        body = t("Police 113 - Fire 114 - Ambulance 115.", "Công an 113 - Cứu hỏa 114 - Cấp cứu 115."),
       )
     }
     items(state.emergencyContacts) { contact ->
@@ -81,7 +99,8 @@ fun CrisisScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Str
           Column(modifier = Modifier.weight(1f)) {
             Text(contact.name, fontWeight = FontWeight.Bold, color = Cocoa)
             val verified = tr(language, if (contact.isVerified) "yes" else "no", if (contact.isVerified) "có" else "không")
-            Text("${contact.contact} - ${tr(language, "verified", "đã xác minh")}: $verified", color = Taupe)
+            val autoNotify = tr(language, if (contact.autoNotify) "on" else "off", if (contact.autoNotify) "bật" else "tắt")
+            Text("${contact.contact} - ${tr(language, "verified", "đã xác minh")}: $verified - ${tr(language, "auto notify", "tự động báo")}: $autoNotify", color = Taupe)
           }
           IconButton(onClick = {
             runCatching {
@@ -90,6 +109,29 @@ fun CrisisScreen(state: EsmeryState, repository: EsmeryRepository, onToast: (Str
           }) {
             Icon(Icons.Rounded.Call, contentDescription = null, tint = Cocoa)
           }
+          IconButton(onClick = {
+            scope.launch { repository.deleteEmergencyContact(contact.id) }
+          }) {
+            Icon(Icons.Rounded.Delete, contentDescription = null, tint = Taupe)
+          }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+          Text(t("Verified", "Đã xác minh"), color = Cocoa)
+          Switch(
+            checked = contact.isVerified,
+            onCheckedChange = {
+              scope.launch { repository.toggleEmergencyContactVerified(contact.id) }
+            },
+          )
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+          Text(t("Auto notify", "Tự động báo"), color = Cocoa)
+          Switch(
+            checked = contact.autoNotify,
+            onCheckedChange = {
+              scope.launch { repository.toggleEmergencyContactAutoNotify(contact.id) }
+            },
+          )
         }
       }
     }
