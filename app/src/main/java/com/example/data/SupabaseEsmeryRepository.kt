@@ -774,9 +774,7 @@ class SupabaseEsmeryRemoteDataSource(
         }.decodeList<EsmeryNotification>()
       }.sortedByDescending { it.createdAt },
       moments = remoteOrDefault("moments", emptyList()) {
-        client.from("moments").select {
-          filter { eq("user_id", userId) }
-        }.decodeList<Moment>()
+        client.from("moments").select().decodeList<Moment>()
       }.sortedByDescending { it.createdAt },
       emergencyContacts = remoteOrDefault("emergency_contacts", emptyList()) {
         client.from("emergency_contacts").select {
