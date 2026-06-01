@@ -74,6 +74,7 @@ class ResilientEsmeryRepository(
       updateProfileLastSafeAt(state.profile.id, state.profile.lastSafeAt)
       insertTimelineEvent(state.timelineEvents.first())
       insertNotification(state.notifications.first())
+      insertLocalEnvelope(state)
       recipientDeliveriesForCheckIn(state, checkIn.id, checkIn.createdAt).forEach { delivery ->
         insertNotification(delivery.notification)
         insertTimelineEvent(delivery.event)
@@ -148,6 +149,7 @@ class ResilientEsmeryRepository(
       insertFriendRequest(requestForRemote)
       upsertCircleMember(state.circleMembers.first())
       insertTimelineEvent(state.timelineEvents.first())
+      state.auditLogs.firstOrNull()?.let { insertAuditLog(it) }
       requestForRemote.receiverUserId?.let { receiverId ->
         insertNotification(
           EsmeryNotification(
@@ -204,6 +206,7 @@ class ResilientEsmeryRepository(
       updateCircleMemberStatus(requestId, status, currentUserId)
       if (reciprocalMember != null) upsertCircleMember(reciprocalMember)
       insertTimelineEvent(local.state.value.timelineEvents.first())
+      local.state.value.auditLogs.firstOrNull()?.let { insertAuditLog(it) }
     }
   }
 
@@ -213,6 +216,7 @@ class ResilientEsmeryRepository(
     remote.tryRemote {
       insertTimelineEvent(event)
       insertNotification(local.state.value.notifications.first())
+      insertLocalEnvelope(local.state.value)
       state.circleMembers.firstOrNull { it.id == memberId }?.memberUserId?.let { receiverId ->
         val notification = EsmeryNotification(
           id = id(),
@@ -247,6 +251,7 @@ class ResilientEsmeryRepository(
       insertMoment(moment)
       insertTimelineEvent(event)
       insertNotification(local.state.value.notifications.first())
+      insertLocalEnvelope(local.state.value)
       recipientDeliveriesForMoment(local.state.value, moment, event.createdAt).forEach { delivery ->
         insertNotification(delivery.notification)
         insertTimelineEvent(delivery.event)
@@ -266,6 +271,7 @@ class ResilientEsmeryRepository(
     remote.tryRemote {
       upsertEmergencyContact(saved)
       insertTimelineEvent(event)
+      local.state.value.auditLogs.firstOrNull()?.let { insertAuditLog(it) }
     }
     return saved
   }
@@ -320,6 +326,7 @@ class ResilientEsmeryRepository(
       remote.tryRemote {
         insertTimelineEvent(event)
         insertNotification(local.state.value.notifications.first())
+        insertLocalEnvelope(local.state.value)
       }
     }
     return event
@@ -330,6 +337,7 @@ class ResilientEsmeryRepository(
     remote.tryRemote {
       insertTimelineEvent(event)
       insertNotification(local.state.value.notifications.first())
+      insertLocalEnvelope(local.state.value)
     }
     return event
   }
@@ -338,9 +346,88 @@ class ResilientEsmeryRepository(
     val subscription = local.updateSubscription(plan)
     remote.tryRemote {
       upsertSubscription(subscription)
+      upsertEntitlement(local.state.value.entitlement)
       upsertProfile(local.state.value.profile)
+      local.state.value.auditLogs.firstOrNull()?.let { insertAuditLog(it) }
     }
     return subscription
+  }
+
+  override suspend fun registerDeviceToken(token: String, provider: String): DeviceToken {
+    val saved = local.registerDeviceToken(token, provider)
+    remote.tryRemote {
+      upsertDeviceToken(saved)
+      local.state.value.auditLogs.firstOrNull()?.let { insertAuditLog(it) }
+    }
+    return saved
+  }
+
+  override suspend fun unregisterDeviceToken(token: String) {
+    local.unregisterDeviceToken(token)
+    remote.tryRemote {
+      deactivateDeviceToken(token)
+      local.state.value.auditLogs.firstOrNull()?.let { insertAuditLog(it) }
+    }
+  }
+
+  override suspend fun resolveAlertIncident(incidentId: String): AlertIncident? {
+    val resolved = local.resolveAlertIncident(incidentId)
+    if (resolved != null) {
+      remote.tryRemote {
+        upsertAlertIncident(resolved)
+        local.state.value.alertJobs
+          .filter { it.incidentId == incidentId }
+          .forEach { upsertAlertJob(it) }
+        local.state.value.auditLogs.firstOrNull()?.let { insertAuditLog(it) }
+      }
+    }
+    return resolved
+  }
+
+  override suspend fun shareEmergencyLocation(latitude: Double, longitude: Double, accuracyMeters: Double?): LocationShare {
+    val share = local.shareEmergencyLocation(latitude, longitude, accuracyMeters)
+    remote.tryRemote {
+      upsertLocationShare(share)
+      local.state.value.auditLogs.firstOrNull()?.let { insertAuditLog(it) }
+    }
+    return share
+  }
+
+  override suspend fun createPaymentOrder(plan: SubscriptionPlan, provider: PaymentProvider): PaymentOrder {
+    val order = local.createPaymentOrder(plan, provider)
+    remote.tryRemote {
+      upsertPaymentOrder(order)
+      local.state.value.auditLogs.firstOrNull()?.let { insertAuditLog(it) }
+    }
+    return order
+  }
+
+  override suspend fun markPaymentOrderPaid(referenceCode: String): Entitlement? {
+    val entitlement = local.markPaymentOrderPaid(referenceCode)
+    if (entitlement != null) {
+      remote.tryRemote {
+        local.state.value.paymentOrders.firstOrNull { it.referenceCode == referenceCode }?.let { upsertPaymentOrder(it) }
+        upsertEntitlement(entitlement)
+        upsertSubscription(local.state.value.subscriptionStatus)
+        upsertProfile(local.state.value.profile)
+        local.state.value.auditLogs.firstOrNull()?.let { insertAuditLog(it) }
+      }
+    }
+    return entitlement
+  }
+
+  private suspend fun EsmeryRemoteDataSource.insertLocalEnvelope(state: EsmeryState) {
+    val notificationId = state.notifications.firstOrNull()?.id
+    if (notificationId != null) {
+      state.notificationDeliveries
+        .filter { it.notificationId == notificationId }
+        .forEach { insertNotificationDelivery(it) }
+    }
+    state.alertIncidents.firstOrNull()?.let { upsertAlertIncident(it) }
+    state.alertJobs
+      .filter { job -> state.alertIncidents.firstOrNull()?.id == job.incidentId }
+      .forEach { upsertAlertJob(it) }
+    state.auditLogs.firstOrNull()?.let { insertAuditLog(it) }
   }
 
   private fun recipientDeliveriesForCheckIn(
@@ -427,6 +514,21 @@ class ResilientEsmeryRepository(
         .sortedBy { it.name },
       safetyRhythms = mergeById(localState.safetyRhythms, remoteState.safetyRhythms) { it.id }
         .sortedBy { it.checkTime },
+      deviceTokens = mergeById(localState.deviceTokens, remoteState.deviceTokens) { it.id }
+        .sortedByDescending { it.lastSeenAt },
+      notificationDeliveries = mergeById(localState.notificationDeliveries, remoteState.notificationDeliveries) { it.id }
+        .sortedByDescending { it.createdAt },
+      alertIncidents = mergeById(localState.alertIncidents, remoteState.alertIncidents) { it.id }
+        .sortedByDescending { it.createdAt },
+      alertJobs = mergeById(localState.alertJobs, remoteState.alertJobs) { it.id }
+        .sortedByDescending { it.runAt },
+      locationShares = mergeById(localState.locationShares, remoteState.locationShares) { it.id }
+        .sortedByDescending { it.createdAt },
+      paymentOrders = mergeById(localState.paymentOrders, remoteState.paymentOrders) { it.id }
+        .sortedByDescending { it.createdAt },
+      entitlement = if (remoteState.entitlement.updatedAt >= localState.entitlement.updatedAt) remoteState.entitlement else localState.entitlement,
+      auditLogs = mergeById(localState.auditLogs, remoteState.auditLogs) { it.id }
+        .sortedByDescending { it.createdAt },
     )
   }
 
@@ -504,6 +606,15 @@ interface EsmeryRemoteDataSource {
   suspend fun deleteSafetyRhythm(rhythmId: String)
   suspend fun upsertSafetySettings(settings: SafetySettings)
   suspend fun upsertSubscription(subscription: SubscriptionStatus)
+  suspend fun upsertDeviceToken(token: DeviceToken)
+  suspend fun deactivateDeviceToken(token: String)
+  suspend fun insertNotificationDelivery(delivery: NotificationDelivery)
+  suspend fun upsertAlertIncident(incident: AlertIncident)
+  suspend fun upsertAlertJob(job: AlertJob)
+  suspend fun upsertLocationShare(share: LocationShare)
+  suspend fun upsertPaymentOrder(order: PaymentOrder)
+  suspend fun upsertEntitlement(entitlement: Entitlement)
+  suspend fun insertAuditLog(log: AuditLog)
 }
 
 class SupabaseEsmeryRemoteDataSource(
@@ -575,6 +686,18 @@ class SupabaseEsmeryRemoteDataSource(
         filter { eq("user_id", userId) }
       }.decodeSingleOrNull<SubscriptionStatus>()
     } ?: SubscriptionStatus(userId = userId)
+
+    val entitlement = remoteOrNull("entitlements") {
+      client.from("entitlements").select {
+        filter { eq("user_id", userId) }
+      }.decodeSingleOrNull<Entitlement>()
+    } ?: Entitlement(
+      userId = userId,
+      plan = subscription.plan,
+      isPremium = subscription.plan != SubscriptionPlan.Basic,
+      source = if (subscription.plan == SubscriptionPlan.Basic) EntitlementSource.Basic else EntitlementSource.Manual,
+      updatedAt = "",
+    )
 
     val settings = remoteOrNull("safety_settings") {
       client.from("safety_settings").select {
@@ -667,6 +790,42 @@ class SupabaseEsmeryRemoteDataSource(
       }.sortedBy { it.checkTime },
       safetySettings = settings,
       subscriptionStatus = subscription,
+      deviceTokens = remoteOrDefault("device_tokens", emptyList()) {
+        client.from("device_tokens").select {
+          filter { eq("user_id", userId) }
+        }.decodeList<DeviceToken>()
+      }.sortedByDescending { it.lastSeenAt },
+      notificationDeliveries = remoteOrDefault("notification_deliveries", emptyList()) {
+        client.from("notification_deliveries").select {
+          filter { eq("user_id", userId) }
+        }.decodeList<NotificationDelivery>()
+      }.sortedByDescending { it.createdAt },
+      alertIncidents = remoteOrDefault("alert_incidents", emptyList()) {
+        client.from("alert_incidents").select {
+          filter { eq("user_id", userId) }
+        }.decodeList<AlertIncident>()
+      }.sortedByDescending { it.createdAt },
+      alertJobs = remoteOrDefault("alert_jobs", emptyList()) {
+        client.from("alert_jobs").select {
+          filter { eq("user_id", userId) }
+        }.decodeList<AlertJob>()
+      }.sortedByDescending { it.runAt },
+      locationShares = remoteOrDefault("location_shares", emptyList()) {
+        client.from("location_shares").select {
+          filter { eq("user_id", userId) }
+        }.decodeList<LocationShare>()
+      }.sortedByDescending { it.createdAt },
+      paymentOrders = remoteOrDefault("payment_orders", emptyList()) {
+        client.from("payment_orders").select {
+          filter { eq("user_id", userId) }
+        }.decodeList<PaymentOrder>()
+      }.sortedByDescending { it.createdAt },
+      entitlement = entitlement,
+      auditLogs = remoteOrDefault("audit_logs", emptyList()) {
+        client.from("audit_logs").select {
+          filter { eq("user_id", userId) }
+        }.decodeList<AuditLog>()
+      }.sortedByDescending { it.createdAt },
     )
   }
 
@@ -748,6 +907,44 @@ class SupabaseEsmeryRemoteDataSource(
 
   override suspend fun upsertSubscription(subscription: SubscriptionStatus) {
     client.from("subscription_status").upsert(subscription)
+  }
+
+  override suspend fun upsertDeviceToken(token: DeviceToken) {
+    client.from("device_tokens").upsert(token)
+  }
+
+  override suspend fun deactivateDeviceToken(token: String) {
+    client.from("device_tokens").update(DeviceTokenActiveUpdate(isActive = false)) {
+      filter { eq("token", token) }
+    }
+  }
+
+  override suspend fun insertNotificationDelivery(delivery: NotificationDelivery) {
+    client.from("notification_deliveries").insert(delivery)
+  }
+
+  override suspend fun upsertAlertIncident(incident: AlertIncident) {
+    client.from("alert_incidents").upsert(incident)
+  }
+
+  override suspend fun upsertAlertJob(job: AlertJob) {
+    client.from("alert_jobs").upsert(job)
+  }
+
+  override suspend fun upsertLocationShare(share: LocationShare) {
+    client.from("location_shares").upsert(share)
+  }
+
+  override suspend fun upsertPaymentOrder(order: PaymentOrder) {
+    client.from("payment_orders").upsert(order)
+  }
+
+  override suspend fun upsertEntitlement(entitlement: Entitlement) {
+    client.from("entitlements").upsert(entitlement)
+  }
+
+  override suspend fun insertAuditLog(log: AuditLog) {
+    client.from("audit_logs").insert(log)
   }
 }
 
@@ -831,4 +1028,9 @@ private data class CircleMemberStatusUpdate(
 @Serializable
 private data class NotificationReadUpdate(
   @SerialName("is_read") val isRead: Boolean,
+)
+
+@Serializable
+private data class DeviceTokenActiveUpdate(
+  @SerialName("is_active") val isActive: Boolean,
 )

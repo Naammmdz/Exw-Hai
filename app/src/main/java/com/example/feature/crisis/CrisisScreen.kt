@@ -17,6 +17,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,6 +42,8 @@ import com.example.core.ui.EsmeryTextField
 import com.example.core.ui.InfoCard
 import com.example.core.ui.PrimaryButton
 import com.example.core.ui.ScreenList
+import com.example.data.AlertIncidentStatus
+import com.example.data.DeliveryStatus
 import com.example.data.EmergencyContact
 import com.example.data.EsmeryRepository
 import com.example.data.EsmeryState
@@ -63,12 +66,42 @@ fun CrisisScreen(
   val unavailableMessage = t("Contact action is unavailable on this device.", "Thiết bị này không mở được thao tác liên hệ.")
   val savedMessage = t("Emergency contact saved.", "Đã lưu liên hệ khẩn cấp.")
   val alertMessage = t("Emergency alert recorded for enabled contacts.", "Đã ghi nhận cảnh báo khẩn cấp cho liên hệ đang bật.")
+  val resolvedMessage = t("Alert incident resolved.", "Đã đóng cảnh báo.")
+  val activeIncident = state.alertIncidents.firstOrNull {
+    it.status == AlertIncidentStatus.Active || it.status == AlertIncidentStatus.Escalated
+  }
   ScreenList(title = appString(R.string.crisis), subtitle = t("Fast access to contacts and safe steps.", "Truy cập nhanh liên hệ và các bước an toàn.")) {
     item {
       PrimaryButton(text = t("Alert emergency contacts", "Cảnh báo liên hệ khẩn cấp"), icon = Icons.Rounded.Warning) {
         actionScope.launch {
           repository.triggerEmergencyAlert()
           onToast(alertMessage)
+        }
+      }
+    }
+    if (activeIncident != null) {
+      item {
+        CardBlock {
+          Text(t("Active alert", "Cảnh báo đang mở"), color = Cocoa, fontWeight = FontWeight.Black)
+          Text(
+            t(
+              "${activeIncident.reason} - escalation due ${activeIncident.escalationDueAt.take(16)}",
+              "${activeIncident.reason} - sẽ leo thang lúc ${activeIncident.escalationDueAt.take(16)}",
+            ),
+            color = Taupe,
+          )
+          val openDeliveries = state.notificationDeliveries.count {
+            it.status == DeliveryStatus.Pending || it.status == DeliveryStatus.Failed
+          }
+          Text(t("Open deliveries: $openDeliveries", "Thông báo đang xử lý: $openDeliveries"), color = Taupe)
+          OutlinedButton(onClick = {
+            actionScope.launch {
+              repository.resolveAlertIncident(activeIncident.id)
+              onToast(resolvedMessage)
+            }
+          }) {
+            Text(t("Resolve alert", "Đóng cảnh báo"), color = Cocoa)
+          }
         }
       }
     }

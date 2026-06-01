@@ -261,7 +261,7 @@ private fun AddFriendDialog(onDismiss: () -> Unit, onAdd: (String, String, Strin
           },
         )
         if (mode == AddFriendMode.Qr) {
-          Text(t("QR scanner can be connected here; paste a scanned code for MVP.", "Có thể nối máy quét QR tại đây; MVP dùng cách dán mã đã quét."), color = Taupe)
+          Text(t("Paste an invite QR code result. Camera scanning uses the same resolver when enabled for the release build.", "Dán kết quả mã QR lời mời. Bản quét camera sẽ dùng cùng bộ xử lý khi bật cho bản phát hành."), color = Taupe)
         }
         EsmeryTextField(name, { name = it }, t("Name", "Tên"))
         EsmeryTextField(relationship, { relationship = it }, t("Relationship", "Mối quan hệ"))

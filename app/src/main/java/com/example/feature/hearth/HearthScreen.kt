@@ -38,7 +38,9 @@ import com.example.core.i18n.t
 import com.example.core.ui.InfoCard
 import com.example.core.ui.LanguageButton
 import com.example.core.ui.ScreenList
+import com.example.data.AlertIncidentStatus
 import com.example.data.CircleStatus
+import com.example.data.DeliveryStatus
 import com.example.data.EsmeryNotification
 import com.example.data.EsmeryState
 import com.example.data.NotificationType
@@ -109,6 +111,21 @@ fun HearthScreen(
         icon = Icons.Rounded.Group,
         title = t("Circle health", "Tình trạng vòng thân"),
         body = t("$count trusted people connected.", "$count người tin cậy đang kết nối."),
+      )
+    }
+    item {
+      val pending = state.notificationDeliveries.count { it.status == DeliveryStatus.Pending }
+      val failed = state.notificationDeliveries.count { it.status == DeliveryStatus.Failed }
+      val activeIncident = state.alertIncidents.firstOrNull {
+        it.status == AlertIncidentStatus.Active || it.status == AlertIncidentStatus.Escalated
+      }
+      InfoCard(
+        icon = if (activeIncident != null || failed > 0) Icons.Rounded.Warning else Icons.Rounded.MarkEmailRead,
+        title = t("Delivery & automation", "Gửi thông báo & tự động hóa"),
+        body = t(
+          "Pending deliveries: $pending, failed: $failed. ${if (activeIncident == null) "No active alert." else "Active alert: ${activeIncident.reason}."}",
+          "Đang chờ gửi: $pending, lỗi: $failed. ${if (activeIncident == null) "Không có cảnh báo đang mở." else "Cảnh báo đang mở: ${activeIncident.reason}."}",
+        ),
       )
     }
     if (state.notifications.isNotEmpty()) {

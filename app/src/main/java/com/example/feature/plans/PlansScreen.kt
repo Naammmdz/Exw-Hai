@@ -25,6 +25,7 @@ import com.example.core.ui.CardBlock
 import com.example.core.ui.ScreenList
 import com.example.data.EsmeryRepository
 import com.example.data.EsmeryState
+import com.example.data.PaymentProvider
 import com.example.data.SubscriptionPlan
 import com.example.ui.theme.Apricot
 import com.example.ui.theme.Cocoa
@@ -43,7 +44,8 @@ fun PlansScreen(
   val basicSelected = t("Basic Care selected.", "Đã chọn gói Chăm sóc cơ bản.")
   val monthlySelected = t("Monthly plan selected.", "Đã chọn gói tháng.")
   val yearlySelected = t("Yearly plan selected.", "Đã chọn gói năm.")
-  ScreenList(title = appString(R.string.plans), subtitle = t("Choose the care level for this MVP. Secure checkout can be connected later.", "Chọn mức chăm sóc cho MVP. Thanh toán bảo mật có thể nối ở phase sau.")) {
+  val orderCreated = t("SePay order created.", "Đã tạo đơn SePay.")
+  ScreenList(title = appString(R.string.plans), subtitle = t("Google Play Billing is the release default; SePay orders support private or web checkout.", "Google Play Billing là mặc định cho bản phát hành; đơn SePay dùng cho kênh riêng hoặc web checkout.")) {
     item {
       PlanCard(
         t("Basic Care", "Chăm sóc cơ bản"),
@@ -69,6 +71,46 @@ fun PlansScreen(
         state.subscriptionStatus.plan == SubscriptionPlan.Yearly,
       ) {
         actionScope.launch { repository.updateSubscription(SubscriptionPlan.Yearly); onToast(yearlySelected) }
+      }
+    }
+    item {
+      CardBlock {
+        Text(t("Production entitlement", "Quyền lợi production"), color = Cocoa, fontWeight = FontWeight.Black)
+        Text(
+          t(
+            "Plan: ${state.entitlement.plan.name}, premium: ${state.entitlement.isPremium}, source: ${state.entitlement.source.name}.",
+            "Gói: ${state.entitlement.plan.name}, premium: ${state.entitlement.isPremium}, nguồn: ${state.entitlement.source.name}.",
+          ),
+          color = Taupe,
+        )
+        val latestOrder = state.paymentOrders.firstOrNull()
+        if (latestOrder != null) {
+          Text(
+            t(
+              "Latest order: ${latestOrder.referenceCode} - ${latestOrder.status.name}.",
+              "Đơn gần nhất: ${latestOrder.referenceCode} - ${latestOrder.status.name}.",
+            ),
+            color = Taupe,
+          )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          Button(onClick = {
+            actionScope.launch {
+              repository.createPaymentOrder(SubscriptionPlan.Monthly, PaymentProvider.SePay)
+              onToast(orderCreated)
+            }
+          }, colors = ButtonDefaults.buttonColors(containerColor = Apricot)) {
+            Text(t("SePay monthly", "SePay tháng"), color = Color.White)
+          }
+          Button(onClick = {
+            actionScope.launch {
+              repository.createPaymentOrder(SubscriptionPlan.Yearly, PaymentProvider.SePay)
+              onToast(orderCreated)
+            }
+          }, colors = ButtonDefaults.buttonColors(containerColor = Apricot)) {
+            Text(t("SePay yearly", "SePay năm"), color = Color.White)
+          }
+        }
       }
     }
   }

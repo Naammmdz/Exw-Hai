@@ -11,9 +11,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.automation.DeviceTokenBootstrap
+import com.example.automation.EsmeryNotificationChannels
+import com.example.automation.SafetyAutomationScheduler
 import com.example.core.i18n.AppLanguage
 import com.example.core.i18n.LocalAppLanguage
 import com.example.core.i18n.appString
@@ -25,11 +29,17 @@ import com.example.feature.home.HomeScreen
 import com.example.feature.onboarding.OnboardingPagerScreen
 import com.example.feature.onboarding.SetupScreen
 import com.example.ui.theme.MyApplicationTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
+    EsmeryNotificationChannels.ensure(this)
+    SafetyAutomationScheduler.schedule(this)
+    lifecycleScope.launch {
+      DeviceTokenBootstrap.registerFirebaseToken(EsmeryServices.repository)
+    }
     setContent {
       MyApplicationTheme {
         EsmeryApp()

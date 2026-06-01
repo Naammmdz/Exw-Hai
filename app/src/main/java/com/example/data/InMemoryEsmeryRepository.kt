@@ -58,12 +58,27 @@ class InMemoryEsmeryRepository : EsmeryRepository {
       relatedEntityId = checkIn.id,
       createdAt = now,
     )
+    val deliveries = deliveryTargetsForCircle(now, notification.id, DeliveryChannel.Push)
+      .plus(deliveryForNotification(now, notification.id, recipientUserId = userId, channel = DeliveryChannel.InApp, status = DeliveryStatus.Sent))
+    val auditLog = audit(now, "check_in_confirmed", checkIn.id)
     mutate {
       it.copy(
         profile = it.profile.copy(lastSafeAt = now),
         checkIns = listOf(checkIn) + it.checkIns,
         timelineEvents = listOf(event) + it.timelineEvents,
         notifications = listOf(notification) + it.notifications,
+        notificationDeliveries = deliveries + it.notificationDeliveries,
+        alertIncidents = it.alertIncidents.map { incident ->
+          if (incident.status == AlertIncidentStatus.Active) {
+            incident.copy(status = AlertIncidentStatus.Resolved, resolvedAt = now)
+          } else {
+            incident
+          }
+        },
+        alertJobs = it.alertJobs.map { job ->
+          if (job.status == AlertJobStatus.Scheduled) job.copy(status = AlertJobStatus.Cancelled) else job
+        },
+        auditLogs = listOf(auditLog) + it.auditLogs,
         circleMembers = it.circleMembers.map { member -> member.copy(lastSafeAt = now) },
       )
     }
@@ -167,7 +182,24 @@ class InMemoryEsmeryRepository : EsmeryRepository {
       relatedEntityId = memberId,
       createdAt = now,
     )
+    val deliveries = listOf(
+      deliveryForNotification(now, notification.id, recipientUserId = userId, channel = DeliveryChannel.InApp, status = DeliveryStatus.Sent),
+    ) + state.value.circleMembers
+      .firstOrNull { it.id == memberId }
+      ?.let { member ->
+        listOf(
+          deliveryForNotification(
+            now = now,
+            notificationId = notification.id,
+            recipientUserId = member.memberUserId,
+            recipientContact = member.invitedContact,
+            channel = DeliveryChannel.Push,
+          ),
+        )
+      }
+      .orEmpty()
     mutate { it.copy(timelineEvents = listOf(event) + it.timelineEvents, notifications = listOf(notification) + it.notifications) }
+    mutate { it.copy(notificationDeliveries = deliveries + it.notificationDeliveries, auditLogs = listOf(audit(now, "gentle_nudge_sent", memberId)) + it.auditLogs) }
     return event
   }
 
@@ -192,11 +224,15 @@ class InMemoryEsmeryRepository : EsmeryRepository {
       relatedEntityId = moment.id,
       createdAt = now,
     )
+    val deliveries = deliveryTargetsForCircle(now, notification.id, DeliveryChannel.Push)
+      .plus(deliveryForNotification(now, notification.id, recipientUserId = userId, channel = DeliveryChannel.InApp, status = DeliveryStatus.Sent))
     mutate {
       it.copy(
         moments = listOf(moment) + it.moments,
         timelineEvents = listOf(event) + it.timelineEvents,
         notifications = listOf(notification) + it.notifications,
+        notificationDeliveries = deliveries + it.notificationDeliveries,
+        auditLogs = listOf(audit(now, "moment_shared", moment.id)) + it.auditLogs,
       )
     }
     return moment
@@ -306,6 +342,10 @@ class InMemoryEsmeryRepository : EsmeryRepository {
     val lastSafeTime = runCatching { LocalDateTime.parse(lastSafeAt, formatter) }.getOrNull() ?: return null
     val missed = Duration.between(lastSafeTime, LocalDateTime.now()).toHours() >= current.safetySettings.inactivityHours
     if (!missed) return null
+    val activeIncident = current.alertIncidents.any {
+      it.status == AlertIncidentStatus.Active && it.reason == "missed_check_in" && it.lastSafeAt == lastSafeAt
+    }
+    if (activeIncident) return null
     val duplicate = current.notifications.any {
       it.type == NotificationType.MissedCheckIn && it.relatedEntityId == lastSafeAt
     }
@@ -330,7 +370,37 @@ class InMemoryEsmeryRepository : EsmeryRepository {
       relatedEntityId = lastSafeAt,
       createdAt = now,
     )
-    mutate { it.copy(timelineEvents = listOf(event) + it.timelineEvents, notifications = listOf(notification) + it.notifications) }
+    val escalationDueAt = LocalDateTime.now()
+      .plusMinutes(current.safetySettings.escalationDelayMinutes.toLong())
+      .format(formatter)
+    val incident = AlertIncident(
+      id = id(),
+      userId = userId,
+      reason = "missed_check_in",
+      lastSafeAt = lastSafeAt,
+      escalationDueAt = escalationDueAt,
+      createdAt = now,
+    )
+    val job = AlertJob(
+      id = id(),
+      incidentId = incident.id,
+      userId = userId,
+      runAt = escalationDueAt,
+      createdAt = now,
+    )
+    mutate {
+      it.copy(
+        timelineEvents = listOf(event) + it.timelineEvents,
+        notifications = listOf(notification) + it.notifications,
+        notificationDeliveries = listOf(
+          deliveryForNotification(now, notification.id, recipientUserId = userId, channel = DeliveryChannel.InApp, status = DeliveryStatus.Sent),
+          deliveryForNotification(now, notification.id, recipientUserId = userId, channel = DeliveryChannel.Push),
+        ) + it.notificationDeliveries,
+        alertIncidents = listOf(incident) + it.alertIncidents,
+        alertJobs = listOf(job) + it.alertJobs,
+        auditLogs = listOf(audit(now, "missed_check_in_detected", incident.id)) + it.auditLogs,
+      )
+    }
     return event
   }
 
@@ -355,19 +425,243 @@ class InMemoryEsmeryRepository : EsmeryRepository {
       relatedEntityId = event.id,
       createdAt = now,
     )
-    mutate { it.copy(timelineEvents = listOf(event) + it.timelineEvents, notifications = listOf(notification) + it.notifications) }
+    val incident = current.alertIncidents.firstOrNull { it.status == AlertIncidentStatus.Active }
+      ?.copy(status = AlertIncidentStatus.Escalated)
+      ?: AlertIncident(
+        id = id(),
+        userId = userId,
+        status = AlertIncidentStatus.Escalated,
+        reason = "manual_emergency",
+        lastSafeAt = current.profile.lastSafeAt,
+        escalationDueAt = now,
+        createdAt = now,
+      )
+    val emergencyDeliveries = targets.map { target ->
+      deliveryForNotification(
+        now = now,
+        notificationId = notification.id,
+        recipientContact = target.contact,
+        channel = if (target.contact.any { it.isDigit() }) DeliveryChannel.Sms else DeliveryChannel.Email,
+      )
+    } + deliveryTargetsForCircle(now, notification.id, DeliveryChannel.Push)
+    mutate {
+      it.copy(
+        timelineEvents = listOf(event) + it.timelineEvents,
+        notifications = listOf(notification) + it.notifications,
+        notificationDeliveries = emergencyDeliveries
+          .plus(deliveryForNotification(now, notification.id, recipientUserId = userId, channel = DeliveryChannel.InApp, status = DeliveryStatus.Sent)) + it.notificationDeliveries,
+        alertIncidents = listOf(incident) + it.alertIncidents.filterNot { item -> item.id == incident.id },
+        alertJobs = it.alertJobs.map { job ->
+          if (job.incidentId == incident.id && job.status == AlertJobStatus.Scheduled) job.copy(status = AlertJobStatus.Sent) else job
+        },
+        auditLogs = listOf(audit(now, "emergency_alert_triggered", incident.id)) + it.auditLogs,
+      )
+    }
     return event
   }
 
   override suspend fun updateSubscription(plan: SubscriptionPlan): SubscriptionStatus {
     val subscription = SubscriptionStatus(userId = userId, plan = plan, isActive = true)
-    mutate { it.copy(subscriptionStatus = subscription, profile = it.profile.copy(isPremium = plan != SubscriptionPlan.Basic)) }
+    val now = now()
+    val entitlement = Entitlement(
+      userId = userId,
+      plan = plan,
+      isPremium = plan != SubscriptionPlan.Basic,
+      source = if (plan == SubscriptionPlan.Basic) EntitlementSource.Basic else EntitlementSource.Manual,
+      updatedAt = now,
+    )
+    mutate {
+      it.copy(
+        subscriptionStatus = subscription,
+        profile = it.profile.copy(isPremium = plan != SubscriptionPlan.Basic),
+        entitlement = entitlement,
+        auditLogs = listOf(audit(now, "subscription_updated", plan.name)) + it.auditLogs,
+      )
+    }
     return subscription
+  }
+
+  override suspend fun registerDeviceToken(token: String, provider: String): DeviceToken {
+    val now = now()
+    val normalized = token.trim()
+    val saved = DeviceToken(
+      id = state.value.deviceTokens.firstOrNull { it.token == normalized && it.provider == provider }?.id ?: id(),
+      userId = userId,
+      token = normalized,
+      provider = provider,
+      createdAt = state.value.deviceTokens.firstOrNull { it.token == normalized && it.provider == provider }?.createdAt ?: now,
+      lastSeenAt = now,
+    )
+    mutate {
+      it.copy(
+        deviceTokens = listOf(saved) + it.deviceTokens.filterNot { item -> item.id == saved.id || item.token == normalized },
+        auditLogs = listOf(audit(now, "device_token_registered", provider)) + it.auditLogs,
+      )
+    }
+    return saved
+  }
+
+  override suspend fun unregisterDeviceToken(token: String) {
+    val now = now()
+    mutate {
+      it.copy(
+        deviceTokens = it.deviceTokens.map { item ->
+          if (item.token == token) item.copy(isActive = false, lastSeenAt = now) else item
+        },
+        auditLogs = listOf(audit(now, "device_token_unregistered", null)) + it.auditLogs,
+      )
+    }
+  }
+
+  override suspend fun resolveAlertIncident(incidentId: String): AlertIncident? {
+    val now = now()
+    var resolved: AlertIncident? = null
+    mutate {
+      it.copy(
+        alertIncidents = it.alertIncidents.map { incident ->
+          if (incident.id == incidentId) {
+            incident.copy(status = AlertIncidentStatus.Resolved, resolvedAt = now).also { item -> resolved = item }
+          } else {
+            incident
+          }
+        },
+        alertJobs = it.alertJobs.map { job ->
+          if (job.incidentId == incidentId && job.status == AlertJobStatus.Scheduled) job.copy(status = AlertJobStatus.Cancelled) else job
+        },
+        auditLogs = listOf(audit(now, "alert_incident_resolved", incidentId)) + it.auditLogs,
+      )
+    }
+    return resolved
+  }
+
+  override suspend fun shareEmergencyLocation(latitude: Double, longitude: Double, accuracyMeters: Double?): LocationShare {
+    val now = now()
+    val share = LocationShare(
+      id = id(),
+      userId = userId,
+      incidentId = state.value.alertIncidents.firstOrNull { it.status == AlertIncidentStatus.Active || it.status == AlertIncidentStatus.Escalated }?.id,
+      latitude = latitude,
+      longitude = longitude,
+      accuracyMeters = accuracyMeters,
+      createdAt = now,
+      expiresAt = LocalDateTime.now().plusHours(2).format(formatter),
+    )
+    mutate {
+      it.copy(
+        locationShares = listOf(share) + it.locationShares,
+        auditLogs = listOf(audit(now, "emergency_location_shared", share.id)) + it.auditLogs,
+      )
+    }
+    return share
+  }
+
+  override suspend fun createPaymentOrder(plan: SubscriptionPlan, provider: PaymentProvider): PaymentOrder {
+    val now = now()
+    val reference = "ESM-${userId.take(8)}-${System.currentTimeMillis()}"
+    val amount = when (plan) {
+      SubscriptionPlan.Basic -> 0
+      SubscriptionPlan.Monthly -> 49_000
+      SubscriptionPlan.Yearly -> 499_000
+    }
+    val qrUrl = if (provider == PaymentProvider.SePay && amount > 0) {
+      "https://qr.sepay.vn/img?amount=$amount&des=$reference"
+    } else {
+      null
+    }
+    val order = PaymentOrder(
+      id = id(),
+      userId = userId,
+      provider = provider,
+      plan = plan,
+      amountVnd = amount,
+      qrUrl = qrUrl,
+      referenceCode = reference,
+      createdAt = now,
+    )
+    mutate {
+      it.copy(
+        paymentOrders = listOf(order) + it.paymentOrders,
+        auditLogs = listOf(audit(now, "payment_order_created", reference)) + it.auditLogs,
+      )
+    }
+    return order
+  }
+
+  override suspend fun markPaymentOrderPaid(referenceCode: String): Entitlement? {
+    val current = state.value
+    val order = current.paymentOrders.firstOrNull { it.referenceCode == referenceCode } ?: return null
+    val now = now()
+    val paidOrder = order.copy(status = PaymentOrderStatus.Paid, updatedAt = now)
+    val source = when (order.provider) {
+      PaymentProvider.GooglePlay -> EntitlementSource.GooglePlay
+      PaymentProvider.SePay -> EntitlementSource.SePay
+    }
+    val entitlement = Entitlement(
+      userId = userId,
+      plan = order.plan,
+      isPremium = order.plan != SubscriptionPlan.Basic,
+      source = source,
+      updatedAt = now,
+    )
+    mutate {
+      it.copy(
+        paymentOrders = listOf(paidOrder) + it.paymentOrders.filterNot { item -> item.id == paidOrder.id },
+        entitlement = entitlement,
+        subscriptionStatus = SubscriptionStatus(userId = userId, plan = order.plan, isActive = true),
+        profile = it.profile.copy(isPremium = entitlement.isPremium),
+        auditLogs = listOf(audit(now, "payment_order_paid", referenceCode)) + it.auditLogs,
+      )
+    }
+    return entitlement
   }
 
   private fun mutate(block: (EsmeryState) -> EsmeryState) {
     _state.value = block(_state.value)
   }
+
+  private fun deliveryTargetsForCircle(
+    now: String,
+    notificationId: String,
+    channel: DeliveryChannel,
+  ): List<NotificationDelivery> = state.value.circleMembers
+    .filter { it.status == CircleStatus.Accepted }
+    .map { member ->
+      deliveryForNotification(
+        now = now,
+        notificationId = notificationId,
+        recipientUserId = member.memberUserId,
+        recipientContact = member.invitedContact,
+        channel = channel,
+      )
+    }
+
+  private fun deliveryForNotification(
+    now: String,
+    notificationId: String,
+    recipientUserId: String? = null,
+    recipientContact: String? = null,
+    channel: DeliveryChannel,
+    status: DeliveryStatus = DeliveryStatus.Pending,
+  ): NotificationDelivery = NotificationDelivery(
+    id = id(),
+    notificationId = notificationId,
+    userId = userId,
+    recipientUserId = recipientUserId,
+    recipientContact = recipientContact?.normalizedContact(),
+    channel = channel,
+    status = status,
+    createdAt = now,
+    updatedAt = now,
+  )
+
+  private fun audit(now: String, action: String, metadata: String?): AuditLog = AuditLog(
+    id = id(),
+    userId = userId,
+    actorUserId = userId,
+    action = action,
+    metadata = metadata,
+    createdAt = now,
+  )
 
   private fun seedState(userId: String, displayName: String, email: String?): EsmeryState {
     val morning = "2026-05-27T08:00:00"

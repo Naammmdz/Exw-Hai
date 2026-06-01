@@ -25,4 +25,10 @@ interface EsmeryRepository {
   suspend fun evaluateMissedCheckIns(): TimelineEvent?
   suspend fun triggerEmergencyAlert(): TimelineEvent
   suspend fun updateSubscription(plan: SubscriptionPlan): SubscriptionStatus
+  suspend fun registerDeviceToken(token: String, provider: String = "fcm"): DeviceToken
+  suspend fun unregisterDeviceToken(token: String)
+  suspend fun resolveAlertIncident(incidentId: String): AlertIncident?
+  suspend fun shareEmergencyLocation(latitude: Double, longitude: Double, accuracyMeters: Double? = null): LocationShare
+  suspend fun createPaymentOrder(plan: SubscriptionPlan, provider: PaymentProvider): PaymentOrder
+  suspend fun markPaymentOrderPaid(referenceCode: String): Entitlement?
 }

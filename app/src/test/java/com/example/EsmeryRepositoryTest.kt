@@ -16,6 +16,14 @@ import com.example.data.CircleMember
 import com.example.data.EsmeryNotification
 import com.example.data.FriendRequest
 import com.example.data.Moment
+import com.example.data.NotificationDelivery
+import com.example.data.AlertIncident
+import com.example.data.AlertJob
+import com.example.data.LocationShare
+import com.example.data.PaymentOrder
+import com.example.data.PaymentProvider
+import com.example.data.Entitlement
+import com.example.data.DeviceToken
 import com.example.data.SubscriptionStatus
 import com.example.data.TimelineEvent
 import kotlinx.coroutines.test.runTest
@@ -109,6 +117,44 @@ class EsmeryRepositoryTest {
     assertNotNull(event)
     assertEquals(null, duplicate)
     assertTrue(repository.state.value.notifications.any { it.type == NotificationType.MissedCheckIn })
+  }
+
+  @Test
+  fun missedCheckInEvaluationCreatesIncidentJobAndDelivery() = runTest {
+    val repository = InMemoryEsmeryRepository()
+
+    repository.evaluateMissedCheckIns()
+
+    val state = repository.state.value
+    assertTrue(state.alertIncidents.any { it.reason == "missed_check_in" })
+    assertTrue(state.alertJobs.isNotEmpty())
+    assertTrue(state.notificationDeliveries.any { it.notificationId == state.notifications.first().id })
+  }
+
+  @Test
+  fun checkInResolvesActiveIncident() = runTest {
+    val repository = InMemoryEsmeryRepository()
+
+    val incidentEvent = repository.evaluateMissedCheckIns()
+    assertNotNull(incidentEvent)
+    repository.checkIn()
+
+    assertTrue(repository.state.value.alertIncidents.all { it.status != com.example.data.AlertIncidentStatus.Active })
+  }
+
+  @Test
+  fun deviceTokenAndSePayOrderUpdateProductionContracts() = runTest {
+    val repository = InMemoryEsmeryRepository()
+
+    repository.registerDeviceToken("token-1")
+    val order = repository.createPaymentOrder(SubscriptionPlan.Monthly, PaymentProvider.SePay)
+    val entitlement = repository.markPaymentOrderPaid(order.referenceCode)
+
+    val state = repository.state.value
+    assertEquals("token-1", state.deviceTokens.first().token)
+    assertEquals(com.example.data.PaymentOrderStatus.Paid, state.paymentOrders.first().status)
+    assertEquals(SubscriptionPlan.Monthly, entitlement?.plan)
+    assertTrue(state.profile.isPremium)
   }
 
   @Test
@@ -347,4 +393,13 @@ private class FakeRemote(
   override suspend fun deleteSafetyRhythm(rhythmId: String) = Unit
   override suspend fun upsertSafetySettings(settings: SafetySettings) = Unit
   override suspend fun upsertSubscription(subscription: SubscriptionStatus) = Unit
+  override suspend fun upsertDeviceToken(token: DeviceToken) = Unit
+  override suspend fun deactivateDeviceToken(token: String) = Unit
+  override suspend fun insertNotificationDelivery(delivery: NotificationDelivery) = Unit
+  override suspend fun upsertAlertIncident(incident: AlertIncident) = Unit
+  override suspend fun upsertAlertJob(job: AlertJob) = Unit
+  override suspend fun upsertLocationShare(share: LocationShare) = Unit
+  override suspend fun upsertPaymentOrder(order: PaymentOrder) = Unit
+  override suspend fun upsertEntitlement(entitlement: Entitlement) = Unit
+  override suspend fun insertAuditLog(log: com.example.data.AuditLog) = Unit
 }
