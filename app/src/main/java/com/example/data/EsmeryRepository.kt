@@ -31,4 +31,11 @@ interface EsmeryRepository {
   suspend fun shareEmergencyLocation(latitude: Double, longitude: Double, accuracyMeters: Double? = null): LocationShare
   suspend fun createPaymentOrder(plan: SubscriptionPlan, provider: PaymentProvider): PaymentOrder
   suspend fun markPaymentOrderPaid(referenceCode: String): Entitlement?
+  suspend fun updateProfile(displayName: String, avatarUrl: String? = null): Profile
+  suspend fun changePassword(newPassword: String)
+  suspend fun deleteAccount()
+  suspend fun uploadMomentImage(imageBytes: ByteArray, fileName: String): String
+  suspend fun uploadAvatarImage(imageBytes: ByteArray, fileName: String): String
+  suspend fun startNotificationRealtime(onNewNotification: () -> Unit)
+  suspend fun stopNotificationRealtime()
 }

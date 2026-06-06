@@ -6,11 +6,16 @@ import androidx.compose.runtime.Composable
 import com.example.core.i18n.AppLanguage
 import com.example.data.InMemoryEsmeryRepository
 import com.example.feature.circle.CircleScreen
+import com.example.feature.circle.CircleViewModel
 import com.example.feature.crisis.CrisisScreen
+import com.example.feature.crisis.CrisisViewModel
 import com.example.feature.hearth.HearthScreen
 import com.example.feature.moments.MomentsScreen
+import com.example.feature.moments.MomentsViewModel
 import com.example.feature.plans.PlansScreen
+import com.example.feature.plans.PlansViewModel
 import com.example.feature.safety.SafetyScreen
+import com.example.feature.safety.SafetyViewModel
 import com.example.ui.theme.MyApplicationTheme
 import org.junit.Rule
 import org.junit.Test
@@ -46,31 +51,31 @@ class EsmeryFeatureSmokeTest {
   @Test
   fun circleRenders() {
     val repository = InMemoryEsmeryRepository()
-    render { CircleScreen(repository.state.value, repository, onToast = {}) }
+    render { CircleScreen(repository.state.value, CircleViewModel(repository), onToast = {}) }
   }
 
   @Test
   fun momentsRenders() {
     val repository = InMemoryEsmeryRepository()
-    render { MomentsScreen(repository.state.value.moments, repository, onToast = {}) }
+    render { MomentsScreen(repository.state.value, MomentsViewModel(repository), onToast = {}) }
   }
 
   @Test
   fun safetyRenders() {
     val repository = InMemoryEsmeryRepository()
-    render { SafetyScreen(repository.state.value, repository, onToast = {}) }
+    render { SafetyScreen(repository.state.value, SafetyViewModel(repository), onToast = {}) }
   }
 
   @Test
   fun crisisRenders() {
     val repository = InMemoryEsmeryRepository()
-    render { CrisisScreen(repository.state.value, repository, onToast = {}) }
+    render { CrisisScreen(repository.state.value, CrisisViewModel(repository), onToast = {}) }
   }
 
   @Test
   fun plansRenders() {
     val repository = InMemoryEsmeryRepository()
-    render { PlansScreen(repository.state.value, repository, onToast = {}) }
+    render { PlansScreen(repository.state.value, PlansViewModel(repository), onToast = {}) }
   }
 
   private fun render(content: @Composable () -> Unit) {

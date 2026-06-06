@@ -12,7 +12,7 @@ class InMemoryEsmeryRepository : EsmeryRepository {
   private val formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
   private var userId = "local-user"
 
-  private val _state = MutableStateFlow(seedState(userId, "Alex Rivers", "alex@example.com"))
+  private val _state = MutableStateFlow(emptyUserState(userId, "ESMERY Friend", null))
   override val state: StateFlow<EsmeryState> = _state.asStateFlow()
 
   fun replaceState(state: EsmeryState) {
@@ -27,14 +27,18 @@ class InMemoryEsmeryRepository : EsmeryRepository {
 
   override suspend fun loadForUser(userId: String, email: String?, displayName: String?) {
     this.userId = userId
-    _state.value = seedState(userId, displayName ?: "Alex Rivers", email)
+    _state.value = if (userId == "demo") {
+      seedState(userId, displayName ?: "Alex Rivers", email)
+    } else {
+      emptyUserState(userId, displayName ?: email?.substringBefore('@') ?: "ESMERY Friend", email)
+    }
   }
 
   override suspend fun refresh() = Unit
 
   override suspend fun clearLocalSession() {
     userId = "local-user"
-    _state.value = seedState(userId, "Alex Rivers", "alex@example.com")
+    _state.value = emptyUserState(userId, "ESMERY Friend", null)
   }
 
   override suspend fun checkIn(note: String?): CheckIn {
@@ -614,6 +618,34 @@ class InMemoryEsmeryRepository : EsmeryRepository {
     }
     return entitlement
   }
+
+  override suspend fun updateProfile(displayName: String, avatarUrl: String?): Profile {
+    mutate {
+      it.copy(
+        profile = it.profile.copy(
+          displayName = displayName,
+          avatarUrl = avatarUrl ?: it.profile.avatarUrl,
+        ),
+      )
+    }
+    return state.value.profile
+  }
+
+  override suspend fun changePassword(newPassword: String) = Unit
+
+  override suspend fun deleteAccount() {
+    clearLocalSession()
+  }
+
+  override suspend fun uploadMomentImage(imageBytes: ByteArray, fileName: String): String =
+    "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=800&q=80"
+
+  override suspend fun uploadAvatarImage(imageBytes: ByteArray, fileName: String): String =
+    "https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?auto=format&fit=crop&w=200&q=80"
+
+  override suspend fun startNotificationRealtime(onNewNotification: () -> Unit) = Unit
+
+  override suspend fun stopNotificationRealtime() = Unit
 
   private fun mutate(block: (EsmeryState) -> EsmeryState) {
     _state.value = block(_state.value)

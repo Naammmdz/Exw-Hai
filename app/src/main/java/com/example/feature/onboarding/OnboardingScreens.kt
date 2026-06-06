@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Group
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -20,6 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,10 +32,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.EsmeryServices
 import com.example.R
 import com.example.core.i18n.appString
 import com.example.core.i18n.t
+import com.example.core.ui.EsmeryTextField
 import com.example.core.ui.PrimaryButton
+import com.example.core.viewmodel.EsmeryViewModelFactory
+import com.example.data.SafetyRhythm
+import com.example.feature.circle.CircleUiEvent
+import com.example.feature.circle.CircleViewModel
+import com.example.feature.safety.SafetyUiEvent
+import com.example.feature.safety.SafetyViewModel
 import com.example.ui.theme.Apricot
 import com.example.ui.theme.Cocoa
 import com.example.ui.theme.Cream
@@ -50,10 +62,7 @@ fun OnboardingPagerScreen(onDone: () -> Unit = {}) {
   var page by remember { mutableStateOf(0) }
 
   Column(
-    modifier = Modifier
-      .fillMaxSize()
-      .background(Cream)
-      .padding(24.dp),
+    modifier = Modifier.fillMaxSize().background(Cream).padding(24.dp),
     verticalArrangement = Arrangement.SpaceBetween,
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {
@@ -86,12 +95,79 @@ fun OnboardingPagerScreen(onDone: () -> Unit = {}) {
 }
 
 @Composable
+fun CircleSetupScreen(
+  onContinue: () -> Unit,
+  onSkip: () -> Unit,
+  viewModel: CircleViewModel = viewModel(factory = EsmeryViewModelFactory { CircleViewModel(EsmeryServices.repository) }),
+) {
+  var contact by remember { mutableStateOf("") }
+  var name by remember { mutableStateOf("") }
+  var relationship by remember { mutableStateOf("Family") }
+
+  Column(
+    modifier = Modifier.fillMaxSize().background(Cream).padding(24.dp),
+    verticalArrangement = Arrangement.Center,
+    horizontalAlignment = Alignment.CenterHorizontally,
+  ) {
+    Icon(Icons.Rounded.Group, contentDescription = null, tint = Apricot, modifier = Modifier.size(72.dp))
+    Spacer(Modifier.height(20.dp))
+    Text(t("Create My Circle", "Tạo vòng thân của tôi"), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = Cocoa, textAlign = TextAlign.Center)
+    Spacer(Modifier.height(16.dp))
+    EsmeryTextField(contact, { contact = it }, t("Email or phone", "Email hoặc số điện thoại"))
+    EsmeryTextField(name, { name = it }, t("Name", "Tên"))
+    EsmeryTextField(relationship, { relationship = it }, t("Relationship", "Mối quan hệ"))
+    Spacer(Modifier.height(20.dp))
+    PrimaryButton(text = t("Add contact", "Thêm liên hệ")) {
+      if (contact.isNotBlank()) {
+        viewModel.onEvent(CircleUiEvent.AddFriend(contact, name, relationship))
+      }
+      onContinue()
+    }
+    TextButton(onClick = onSkip) { Text(t("Skip for now", "Bỏ qua"), color = Taupe) }
+  }
+}
+
+@Composable
+fun RhythmSetupScreen(
+  onContinue: () -> Unit,
+  onSkip: () -> Unit,
+  viewModel: SafetyViewModel = viewModel(factory = EsmeryViewModelFactory { SafetyViewModel(EsmeryServices.repository) }),
+) {
+  val state by viewModel.esmeryState.collectAsState()
+  val defaultLabel = t("Morning check", "Xác nhận buổi sáng")
+  var label by remember(defaultLabel) { mutableStateOf(defaultLabel) }
+  var time by remember { mutableStateOf("08:00") }
+
+  Column(
+    modifier = Modifier.fillMaxSize().background(Cream).padding(24.dp),
+    verticalArrangement = Arrangement.Center,
+    horizontalAlignment = Alignment.CenterHorizontally,
+  ) {
+    Icon(Icons.Rounded.Schedule, contentDescription = null, tint = Apricot, modifier = Modifier.size(72.dp))
+    Spacer(Modifier.height(20.dp))
+    Text(appString(R.string.safety_rhythm), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = Cocoa, textAlign = TextAlign.Center)
+    Spacer(Modifier.height(16.dp))
+    EsmeryTextField(label, { label = it }, t("Check label", "Tên lịch xác nhận"))
+    EsmeryTextField(time, { time = it }, t("Time, e.g. 08:00", "Thời gian, ví dụ 08:00"))
+    Spacer(Modifier.height(20.dp))
+    PrimaryButton(text = t("Save rhythm", "Lưu nhịp an toàn")) {
+      if (label.isNotBlank() && time.isNotBlank()) {
+        viewModel.onEvent(
+          SafetyUiEvent.SaveRhythm(
+            SafetyRhythm(id = "", userId = state.profile.id, label = label, checkTime = time),
+          ),
+        )
+      }
+      onContinue()
+    }
+    TextButton(onClick = onSkip) { Text(t("Skip for now", "Bỏ qua"), color = Taupe) }
+  }
+}
+
+@Composable
 fun SetupScreen(title: String, body: String, primary: String, onPrimary: () -> Unit) {
   Column(
-    modifier = Modifier
-      .fillMaxSize()
-      .background(Cream)
-      .padding(24.dp),
+    modifier = Modifier.fillMaxSize().background(Cream).padding(24.dp),
     verticalArrangement = Arrangement.Center,
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {

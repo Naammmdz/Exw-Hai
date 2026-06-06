@@ -14,6 +14,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.PersonSearch
+import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -28,7 +29,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,7 +49,6 @@ import com.example.core.ui.PrimaryButton
 import com.example.core.ui.ScreenList
 import com.example.data.CircleMember
 import com.example.data.CircleStatus
-import com.example.data.EsmeryRepository
 import com.example.data.EsmeryState
 import com.example.data.FriendRequest
 import com.example.data.normalizedContact
@@ -57,17 +56,16 @@ import com.example.ui.theme.Apricot
 import com.example.ui.theme.Cocoa
 import com.example.ui.theme.Sage
 import com.example.ui.theme.Taupe
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 
 @Composable
 fun CircleScreen(
   state: EsmeryState,
-  repository: EsmeryRepository,
+  viewModel: CircleViewModel,
   onToast: (String) -> Unit,
-  actionScope: CoroutineScope = rememberCoroutineScope(),
 ) {
   var showAdd by remember { mutableStateOf(false) }
+  var showQr by remember { mutableStateOf(false) }
+  var scannedContact by remember { mutableStateOf("") }
   val language = LocalAppLanguage.current
   val acceptedMessage = t("Friend request accepted.", "Đã chấp nhận lời mời.")
   val declinedMessage = t("Friend request declined.", "Đã từ chối lời mời.")
@@ -91,17 +89,33 @@ fun CircleScreen(
   }
   val visibleMembers = state.circleMembers.filter { it.status == CircleStatus.Accepted }
 
+  if (showQr) {
+    QrScannerScreen(
+      onResult = { value ->
+        scannedContact = value
+        showQr = false
+        showAdd = true
+      },
+      onDismiss = { showQr = false },
+    )
+    return
+  }
+
   ScreenList(title = appString(R.string.circle), subtitle = t("Trusted people who can receive safety alerts.", "Những người tin cậy có thể nhận cảnh báo an toàn.")) {
     item {
-      PrimaryButton(text = appString(R.string.add_friend), icon = Icons.Rounded.Add) { showAdd = true }
+      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        PrimaryButton(text = appString(R.string.add_friend), icon = Icons.Rounded.Add) { showAdd = true }
+        OutlinedButton(onClick = { showQr = true }, shape = RoundedCornerShape(8.dp)) {
+          Icon(Icons.Rounded.QrCodeScanner, contentDescription = null, tint = Cocoa)
+          Text(t("Scan QR", "Quét QR"), color = Cocoa)
+        }
+      }
     }
     item {
       OutlinedButton(
         onClick = {
-          actionScope.launch {
-            repository.refresh()
-            onToast(refreshedMessage)
-          }
+          viewModel.onEvent(CircleUiEvent.Refresh)
+          onToast(refreshedMessage)
         },
         shape = RoundedCornerShape(8.dp),
       ) {
@@ -130,16 +144,12 @@ fun CircleScreen(
         currentUserId = state.profile.id,
         senderName = senderName,
         onAccept = {
-          actionScope.launch {
-            repository.updateFriendRequest(request.id, CircleStatus.Accepted)
-            onToast(acceptedMessage)
-          }
+          viewModel.onEvent(CircleUiEvent.UpdateFriendRequest(request.id, CircleStatus.Accepted))
+          onToast(acceptedMessage)
         },
         onDecline = {
-          actionScope.launch {
-            repository.updateFriendRequest(request.id, CircleStatus.Declined)
-            onToast(declinedMessage)
-          }
+          viewModel.onEvent(CircleUiEvent.UpdateFriendRequest(request.id, CircleStatus.Declined))
+          onToast(declinedMessage)
         },
       )
     }
@@ -148,29 +158,23 @@ fun CircleScreen(
         member = member,
         canNudge = member.status == CircleStatus.Accepted && member.memberUserId != null,
         onNudge = {
-          actionScope.launch {
-            repository.sendNudge(member.id)
-            onToast(tr(language, "Gentle nudge sent to ${member.name}.", "Đã gửi nhắc nhở nhẹ nhàng cho ${member.name}."))
-          }
+          viewModel.onEvent(CircleUiEvent.SendNudge(member.id))
+          onToast(tr(language, "Gentle nudge sent to ${member.name}.", "Đã gửi nhắc nhở nhẹ nhàng cho ${member.name}."))
         },
       )
     }
   }
 
   if (showAdd) {
-    AddFriendDialog(onDismiss = { showAdd = false }, onAdd = { contact, name, relationship ->
-      actionScope.launch {
-        val request = repository.addFriendRequest(contact, name, relationship)
+    AddFriendDialog(
+      initialContact = scannedContact,
+      onDismiss = { showAdd = false; scannedContact = "" },
+      onAdd = { contact, name, relationship ->
+        viewModel.onEvent(CircleUiEvent.AddFriend(contact, name, relationship))
         showAdd = false
-        onToast(
-          when (request.status) {
-            CircleStatus.Accepted -> alreadyInCircleMessage
-            CircleStatus.Declined -> cannotAddSelfMessage
-            CircleStatus.Pending -> invitationSentMessage
-          },
-        )
-      }
-    })
+        onToast(invitationSentMessage)
+      },
+    )
   }
 }
 
@@ -229,15 +233,11 @@ private fun FriendRequestCard(
   }
 }
 
-private enum class AddFriendMode {
-  Contact,
-  Id,
-  Qr,
-}
+private enum class AddFriendMode { Contact, Id, Qr }
 
 @Composable
-private fun AddFriendDialog(onDismiss: () -> Unit, onAdd: (String, String, String) -> Unit) {
-  var contact by remember { mutableStateOf("") }
+private fun AddFriendDialog(initialContact: String = "", onDismiss: () -> Unit, onAdd: (String, String, String) -> Unit) {
+  var contact by remember(initialContact) { mutableStateOf(initialContact) }
   var name by remember { mutableStateOf("") }
   var relationship by remember { mutableStateOf("") }
   var mode by remember { mutableStateOf(AddFriendMode.Contact) }
@@ -260,9 +260,6 @@ private fun AddFriendDialog(onDismiss: () -> Unit, onAdd: (String, String, Strin
             AddFriendMode.Qr -> t("QR result", "Kết quả QR")
           },
         )
-        if (mode == AddFriendMode.Qr) {
-          Text(t("Paste an invite QR code result. Camera scanning uses the same resolver when enabled for the release build.", "Dán kết quả mã QR lời mời. Bản quét camera sẽ dùng cùng bộ xử lý khi bật cho bản phát hành."), color = Taupe)
-        }
         EsmeryTextField(name, { name = it }, t("Name", "Tên"))
         EsmeryTextField(relationship, { relationship = it }, t("Relationship", "Mối quan hệ"))
       }

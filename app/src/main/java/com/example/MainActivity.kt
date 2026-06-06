@@ -1,11 +1,14 @@
 package com.example
 
+import android.Manifest
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -22,13 +25,16 @@ import com.example.core.i18n.AppLanguage
 import com.example.core.i18n.LocalAppLanguage
 import com.example.core.i18n.appString
 import com.example.core.i18n.next
-import com.example.core.i18n.t
 import com.example.feature.auth.SignUpScreen
 import com.example.feature.auth.WelcomeScreen
 import com.example.feature.home.HomeScreen
+import com.example.feature.onboarding.CircleSetupScreen
 import com.example.feature.onboarding.OnboardingPagerScreen
-import com.example.feature.onboarding.SetupScreen
+import com.example.feature.onboarding.RhythmSetupScreen
 import com.example.ui.theme.MyApplicationTheme
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -42,8 +48,21 @@ class MainActivity : ComponentActivity() {
     }
     setContent {
       MyApplicationTheme {
+        NotificationPermissionRequest()
         EsmeryApp()
       }
+    }
+  }
+}
+
+@OptIn(ExperimentalPermissionsApi::class)
+@Composable
+private fun NotificationPermissionRequest() {
+  if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+  val permissionState = rememberPermissionState(Manifest.permission.POST_NOTIFICATIONS)
+  LaunchedEffect(Unit) {
+    if (!permissionState.status.isGranted) {
+      permissionState.launchPermissionRequest()
     }
   }
 }
@@ -93,25 +112,19 @@ fun EsmeryApp(
         OnboardingPagerScreen(onDone = { navController.navigate(Routes.CircleSetup) })
       }
       composable(Routes.CircleSetup) {
-        SetupScreen(
-          title = t("Create My Circle", "Tạo vòng thân của tôi"),
-          body = t(
-            "Add at least one trusted contact now, or continue and do it later.",
-            "Thêm ít nhất một liên hệ tin cậy ngay bây giờ, hoặc tiếp tục và thêm sau.",
-          ),
-          primary = t("Continue", "Tiếp tục"),
-          onPrimary = { navController.navigate(Routes.RhythmSetup) },
+        CircleSetupScreen(
+          onContinue = { navController.navigate(Routes.RhythmSetup) },
+          onSkip = { navController.navigate(Routes.RhythmSetup) },
         )
       }
       composable(Routes.RhythmSetup) {
-        SetupScreen(
-          title = appString(R.string.safety_rhythm),
-          body = t(
-            "Wakeup and bedtime checks are ready. You can edit them from Safety.",
-            "Lịch xác nhận khi thức dậy và trước khi ngủ đã sẵn sàng. Bạn có thể chỉnh trong mục An toàn.",
-          ),
-          primary = appString(R.string.get_started),
-          onPrimary = {
+        RhythmSetupScreen(
+          onContinue = {
+            navController.navigate(Routes.Home) {
+              popUpTo(Routes.SignIn) { inclusive = true }
+            }
+          },
+          onSkip = {
             navController.navigate(Routes.Home) {
               popUpTo(Routes.SignIn) { inclusive = true }
             }

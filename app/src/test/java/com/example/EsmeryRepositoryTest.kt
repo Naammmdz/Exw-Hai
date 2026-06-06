@@ -34,6 +34,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class EsmeryRepositoryTest {
+  private suspend fun demoRepository(): InMemoryEsmeryRepository =
+    InMemoryEsmeryRepository().also { it.loadForUser("demo", "alex@example.com", "Alex Rivers") }
+
   @Test
   fun checkInAddsTimelineEventAndUpdatesLastSafeAt() = runTest {
     val repository = InMemoryEsmeryRepository()
@@ -96,7 +99,7 @@ class EsmeryRepositoryTest {
 
   @Test
   fun nudgeAndEmergencyAlertCreateTimelineAndNotifications() = runTest {
-    val repository = InMemoryEsmeryRepository()
+    val repository = demoRepository()
     val memberId = repository.state.value.circleMembers.first().id
 
     repository.sendNudge(memberId)
@@ -109,7 +112,7 @@ class EsmeryRepositoryTest {
 
   @Test
   fun missedCheckInEvaluationCreatesSingleNotification() = runTest {
-    val repository = InMemoryEsmeryRepository()
+    val repository = demoRepository()
 
     val event = repository.evaluateMissedCheckIns()
     val duplicate = repository.evaluateMissedCheckIns()
@@ -121,7 +124,7 @@ class EsmeryRepositoryTest {
 
   @Test
   fun missedCheckInEvaluationCreatesIncidentJobAndDelivery() = runTest {
-    val repository = InMemoryEsmeryRepository()
+    val repository = demoRepository()
 
     repository.evaluateMissedCheckIns()
 
@@ -133,7 +136,7 @@ class EsmeryRepositoryTest {
 
   @Test
   fun checkInResolvesActiveIncident() = runTest {
-    val repository = InMemoryEsmeryRepository()
+    val repository = demoRepository()
 
     val incidentEvent = repository.evaluateMissedCheckIns()
     assertNotNull(incidentEvent)
@@ -402,4 +405,9 @@ private class FakeRemote(
   override suspend fun upsertPaymentOrder(order: PaymentOrder) = Unit
   override suspend fun upsertEntitlement(entitlement: Entitlement) = Unit
   override suspend fun insertAuditLog(log: com.example.data.AuditLog) = Unit
+  override suspend fun changePassword(newPassword: String) = Unit
+  override suspend fun deleteAccount(userId: String) = Unit
+  override suspend fun tryUpload(path: String, bytes: ByteArray): String? = "https://example.com/$path"
+  override suspend fun startNotificationRealtime(userId: String, onChange: () -> Unit) = Unit
+  override suspend fun stopNotificationRealtime() = Unit
 }

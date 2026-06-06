@@ -3,10 +3,16 @@ package com.example.data
 import android.util.Log
 import com.example.supabase
 import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.functions.functions
 import io.github.jan.supabase.postgrest.from
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
@@ -23,6 +29,7 @@ class ResilientEsmeryRepository(
   private var userId: String? = null
   private var email: String? = null
   private var displayName: String? = null
+  private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
   override suspend fun loadForUser(userId: String, email: String?, displayName: String?) {
     this.userId = userId
@@ -416,6 +423,46 @@ class ResilientEsmeryRepository(
     return entitlement
   }
 
+  override suspend fun updateProfile(displayName: String, avatarUrl: String?): Profile {
+    val profile = local.updateProfile(displayName, avatarUrl)
+    remote.tryRemote { upsertProfile(profile) }
+    return profile
+  }
+
+  override suspend fun changePassword(newPassword: String) {
+    remote.tryRemote { changePassword(newPassword) }
+  }
+
+  override suspend fun deleteAccount() {
+    val id = userId
+    remote.tryRemote { if (id != null) deleteAccount(id) }
+    clearLocalSession()
+  }
+
+  override suspend fun uploadMomentImage(imageBytes: ByteArray, fileName: String): String {
+    val id = userId ?: return local.uploadMomentImage(imageBytes, fileName)
+    return remote.tryUpload("moments/$id/$fileName", imageBytes)
+      ?: local.uploadMomentImage(imageBytes, fileName)
+  }
+
+  override suspend fun uploadAvatarImage(imageBytes: ByteArray, fileName: String): String {
+    val id = userId ?: return local.uploadAvatarImage(imageBytes, fileName)
+    return remote.tryUpload("avatars/$id/$fileName", imageBytes)
+      ?: local.uploadAvatarImage(imageBytes, fileName)
+  }
+
+  override suspend fun startNotificationRealtime(onNewNotification: () -> Unit) {
+    val id = userId ?: return
+    remote.startNotificationRealtime(id) {
+      syncScope.launch { refresh() }
+      onNewNotification()
+    }
+  }
+
+  override suspend fun stopNotificationRealtime() {
+    remote.stopNotificationRealtime()
+  }
+
   private suspend fun EsmeryRemoteDataSource.insertLocalEnvelope(state: EsmeryState) {
     val notificationId = state.notifications.firstOrNull()?.id
     if (notificationId != null) {
@@ -615,6 +662,11 @@ interface EsmeryRemoteDataSource {
   suspend fun upsertPaymentOrder(order: PaymentOrder)
   suspend fun upsertEntitlement(entitlement: Entitlement)
   suspend fun insertAuditLog(log: AuditLog)
+  suspend fun changePassword(newPassword: String)
+  suspend fun deleteAccount(userId: String)
+  suspend fun tryUpload(path: String, bytes: ByteArray): String?
+  suspend fun startNotificationRealtime(userId: String, onChange: () -> Unit)
+  suspend fun stopNotificationRealtime()
 }
 
 class SupabaseEsmeryRemoteDataSource(
@@ -943,6 +995,35 @@ class SupabaseEsmeryRemoteDataSource(
 
   override suspend fun insertAuditLog(log: AuditLog) {
     client.from("audit_logs").insert(log)
+  }
+
+  override suspend fun changePassword(newPassword: String) {
+    client.auth.updateUser {
+      password = newPassword
+    }
+  }
+
+  override suspend fun deleteAccount(userId: String) {
+    client.functions.invoke("delete-account", body = mapOf("user_id" to userId))
+  }
+
+  override suspend fun tryUpload(path: String, bytes: ByteArray): String? = try {
+    val bucket = path.substringBefore('/')
+    val objectPath = path.substringAfter('/')
+    EsmeryStorage.upload(bucket, objectPath, bytes)
+  } catch (error: CancellationException) {
+    throw error
+  } catch (error: Throwable) {
+    Log.e(TAG, "Storage upload failed for $path", error)
+    null
+  }
+
+  override suspend fun startNotificationRealtime(userId: String, onChange: () -> Unit) {
+    EsmeryRealtime.subscribeNotifications(userId, onChange)
+  }
+
+  override suspend fun stopNotificationRealtime() {
+    EsmeryRealtime.stopNotifications()
   }
 }
 

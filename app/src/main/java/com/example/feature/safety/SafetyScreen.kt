@@ -18,7 +18,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import com.example.R
@@ -30,21 +29,17 @@ import com.example.core.ui.EsmeryTextField
 import com.example.core.ui.InfoCard
 import com.example.core.ui.PrimaryButton
 import com.example.core.ui.ScreenList
-import com.example.data.EsmeryRepository
 import com.example.data.EsmeryState
 import com.example.data.SafetyRhythm
 import com.example.data.SafetySettings
 import com.example.ui.theme.Cocoa
 import com.example.ui.theme.Taupe
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 
 @Composable
 fun SafetyScreen(
   state: EsmeryState,
-  repository: EsmeryRepository,
+  viewModel: SafetyViewModel,
   onToast: (String) -> Unit,
-  actionScope: CoroutineScope = rememberCoroutineScope(),
 ) {
   var label by remember { mutableStateOf("") }
   var time by remember { mutableStateOf("") }
@@ -58,13 +53,15 @@ fun SafetyScreen(
         EsmeryTextField(value = time, onValueChange = { time = it }, label = t("Time, e.g. 18:00", "Thời gian, ví dụ 18:00"))
         PrimaryButton(text = t("Save rhythm", "Lưu nhịp an toàn")) {
           if (label.isNotBlank() && time.isNotBlank()) {
-            actionScope.launch {
-              repository.saveSafetyRhythm(SafetyRhythm(id = editingId.orEmpty(), userId = state.profile.id, label = label, checkTime = time))
-              editingId = null
-              label = ""
-              time = ""
-              onToast(savedMessage)
-            }
+            viewModel.onEvent(
+              SafetyUiEvent.SaveRhythm(
+                SafetyRhythm(id = editingId.orEmpty(), userId = state.profile.id, label = label, checkTime = time),
+              ),
+            )
+            editingId = null
+            label = ""
+            time = ""
+            onToast(savedMessage)
           }
         }
       }
@@ -73,10 +70,8 @@ fun SafetyScreen(
       SafetySettingsCard(
         settings = state.safetySettings,
         onSave = { settings ->
-          actionScope.launch {
-            repository.updateSafetySettings(settings)
-            onToast(settingsSavedMessage)
-          }
+          viewModel.onEvent(SafetyUiEvent.SaveSettings(settings))
+          onToast(settingsSavedMessage)
         },
       )
     }
@@ -88,22 +83,11 @@ fun SafetyScreen(
             Text(localizedRhythmLabel(rhythm.label), color = Cocoa, fontWeight = androidx.compose.ui.text.font.FontWeight.Black)
             Text("${rhythm.checkTime} - ${if (rhythm.isEnabled) t("enabled", "đang bật") else t("paused", "đang tạm dừng")}", color = Taupe)
           }
-          Switch(
-            checked = rhythm.isEnabled,
-            onCheckedChange = {
-              actionScope.launch { repository.toggleSafetyRhythm(rhythm.id) }
-            },
-          )
-          IconButton(onClick = {
-            editingId = rhythm.id
-            label = rhythm.label
-            time = rhythm.checkTime
-          }) {
+          Switch(checked = rhythm.isEnabled, onCheckedChange = { viewModel.onEvent(SafetyUiEvent.ToggleRhythm(rhythm.id)) })
+          IconButton(onClick = { editingId = rhythm.id; label = rhythm.label; time = rhythm.checkTime }) {
             Icon(Icons.Rounded.Edit, contentDescription = null, tint = Cocoa)
           }
-          IconButton(onClick = {
-            actionScope.launch { repository.deleteSafetyRhythm(rhythm.id) }
-          }) {
+          IconButton(onClick = { viewModel.onEvent(SafetyUiEvent.DeleteRhythm(rhythm.id)) }) {
             Icon(Icons.Rounded.Delete, contentDescription = null, tint = Taupe)
           }
         }
@@ -149,13 +133,7 @@ private fun SafetySettingsCard(settings: SafetySettings, onSave: (SafetySettings
       Switch(checked = locationSharing, onCheckedChange = { locationSharing = it })
     }
     PrimaryButton(text = t("Save settings", "Lưu cài đặt")) {
-      onSave(
-        settings.copy(
-          inactivityHours = inactivityHours,
-          escalationDelayMinutes = escalationDelay,
-          locationSharingEnabled = locationSharing,
-        ),
-      )
+      onSave(settings.copy(inactivityHours = inactivityHours, escalationDelayMinutes = escalationDelay, locationSharingEnabled = locationSharing))
     }
   }
 }
