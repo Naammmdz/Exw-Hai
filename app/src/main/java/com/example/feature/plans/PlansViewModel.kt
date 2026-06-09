@@ -48,6 +48,7 @@ class PlansViewModel(
         }
         if (paid) {
           _activeOrderReference.value = null
+          showToast("Payment completed.")
           return@launch
         }
       }

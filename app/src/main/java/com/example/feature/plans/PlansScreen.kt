@@ -15,6 +15,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -69,9 +70,16 @@ fun PlansScreen(
   }
 
   val basicSelected = t("Basic Care selected.", "Đã chọn gói Chăm sóc cơ bản.")
-  val monthlySelected = t("Monthly plan selected.", "Đã chọn gói tháng.")
-  val yearlySelected = t("Yearly plan selected.", "Đã chọn gói năm.")
   val orderCreated = t("SePay order created.", "Đã tạo đơn SePay.")
+  val paymentSuccessMessage = t("Payment completed.", "Thanh toán hoàn tất.")
+  val paymentToast by viewModel.toast.collectAsState()
+
+  LaunchedEffect(paymentToast) {
+    paymentToast?.let {
+      onToast(paymentSuccessMessage)
+      viewModel.clearToast()
+    }
+  }
 
   ScreenList(title = appString(R.string.plans), subtitle = t("Google Play Billing is the release default; SePay orders support private or web checkout.", "Google Play Billing là mặc định cho bản phát hành; đơn SePay dùng cho kênh riêng hoặc web checkout.")) {
     item {
@@ -91,8 +99,6 @@ fun PlansScreen(
         state.subscriptionStatus.plan == SubscriptionPlan.Monthly,
       ) {
         if (activity != null) billingManager.launchPurchase(activity, SubscriptionPlan.Monthly)
-        viewModel.onEvent(PlansUiEvent.SelectPlan(SubscriptionPlan.Monthly))
-        onToast(monthlySelected)
       }
     }
     item {
@@ -102,8 +108,6 @@ fun PlansScreen(
         state.subscriptionStatus.plan == SubscriptionPlan.Yearly,
       ) {
         if (activity != null) billingManager.launchPurchase(activity, SubscriptionPlan.Yearly)
-        viewModel.onEvent(PlansUiEvent.SelectPlan(SubscriptionPlan.Yearly))
-        onToast(yearlySelected)
       }
     }
     item {

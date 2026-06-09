@@ -41,7 +41,6 @@ import com.example.core.ui.EsmeryTextField
 import com.example.core.ui.InlineMessage
 import com.example.core.ui.LanguageButton
 import com.example.core.ui.PrimaryButton
-import com.example.data.InMemoryEsmeryRepository
 import com.example.ui.theme.Apricot
 import com.example.ui.theme.Cocoa
 import com.example.ui.theme.Cream
@@ -51,7 +50,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun WelcomeScreen(
   modifier: Modifier = Modifier,
-  authGateway: AuthGateway = remember { AuthGateway(InMemoryEsmeryRepository()) },
+  authGateway: AuthGateway = remember { AuthGateway() },
   language: AppLanguage = AppLanguage.English,
   onToggleLanguage: () -> Unit = {},
   onNavigateToSignUp: () -> Unit = {},
@@ -113,7 +112,7 @@ fun WelcomeScreen(
 
 @Composable
 fun SignUpScreen(
-  authGateway: AuthGateway = remember { AuthGateway(InMemoryEsmeryRepository()) },
+  authGateway: AuthGateway = remember { AuthGateway() },
   language: AppLanguage = AppLanguage.English,
   onToggleLanguage: () -> Unit = {},
   onNavigateBack: () -> Unit = {},

@@ -14,6 +14,7 @@ import com.example.feature.moments.MomentsScreen
 import com.example.feature.moments.MomentsViewModel
 import com.example.feature.plans.PlansScreen
 import com.example.feature.plans.PlansViewModel
+import com.example.feature.timeline.TimelineContent
 import com.example.feature.safety.SafetyScreen
 import com.example.feature.safety.SafetyViewModel
 import com.example.ui.theme.MyApplicationTheme
@@ -76,6 +77,12 @@ class EsmeryFeatureSmokeTest {
   fun plansRenders() {
     val repository = InMemoryEsmeryRepository()
     render { PlansScreen(repository.state.value, PlansViewModel(repository), onToast = {}) }
+  }
+
+  @Test
+  fun timelineRendersEmptyState() {
+    val repository = InMemoryEsmeryRepository()
+    render { TimelineContent(events = repository.state.value.timelineEvents) }
   }
 
   private fun render(content: @Composable () -> Unit) {

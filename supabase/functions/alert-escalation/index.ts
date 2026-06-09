@@ -9,116 +9,104 @@ const fcmPrivateKey = (Deno.env.get("FCM_PRIVATE_KEY") ?? "").replace(/\\n/g, "\
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 
 Deno.serve(async () => {
-  const now = new Date();
-  const { data: settings, error } = await supabase
-    .from("safety_settings")
-    .select("user_id,inactivity_hours,escalation_delay_minutes");
+  const now = new Date().toISOString();
+  const { data: jobs, error } = await supabase
+    .from("alert_jobs")
+    .select("id,incident_id,user_id,run_at,status")
+    .eq("status", "scheduled")
+    .lte("run_at", now);
 
   if (error) return json({ error: error.message }, 500);
 
   const results: unknown[] = [];
-  for (const setting of settings ?? []) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("id,display_name,last_safe_at")
-      .eq("id", setting.user_id)
-      .single();
-    if (!profile?.last_safe_at) continue;
-    const displayName = profile.display_name ?? "A trusted contact";
-
-    const lastSafe = new Date(profile.last_safe_at);
-    const missed = now.getTime() - lastSafe.getTime() >= setting.inactivity_hours * 60 * 60 * 1000;
-    if (!missed) continue;
-
-    const escalationDue = new Date(now.getTime() + setting.escalation_delay_minutes * 60 * 1000).toISOString();
-    const { data: existingIncident } = await supabase
+  for (const job of jobs ?? []) {
+    const { data: incident } = await supabase
       .from("alert_incidents")
       .select("*")
-      .eq("user_id", setting.user_id)
-      .eq("reason", "missed_check_in")
-      .eq("last_safe_at", profile.last_safe_at)
-      .in("status", ["active", "escalated"])
+      .eq("id", job.incident_id)
       .maybeSingle();
-
-    const { data: incident } = existingIncident
-      ? { data: existingIncident }
-      : await supabase
-        .from("alert_incidents")
-        .insert({
-          user_id: setting.user_id,
-          status: "active",
-          reason: "missed_check_in",
-          last_safe_at: profile.last_safe_at,
-          escalation_due_at: escalationDue,
-        })
-        .select()
-        .single();
-
     if (!incident) continue;
 
-    const notification = {
-      user_id: setting.user_id,
-      type: "missed_check_in",
-      title: "Missed check-in detected",
-      body: "Your safety rhythm needs attention.",
-      related_entity_id: incident.id,
-    };
-    const { data: insertedNotification } = await supabase
-      .from("notifications")
-      .insert(notification)
-      .select()
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", job.user_id)
       .single();
 
-    await supabase.from("alert_jobs").upsert(
-      {
-        incident_id: incident.id,
-        user_id: setting.user_id,
-        run_at: escalationDue,
-        status: "scheduled",
-      },
-      { onConflict: "incident_id,user_id,run_at" },
-    );
-
-    if (insertedNotification) {
-      await sendPush(setting.user_id, insertedNotification.title, insertedNotification.body);
-    }
-
-    const circleTitle = "Circle member missed check-in";
-    const circleBody = `${displayName} has not checked in recently.`;
+    const displayName = profile?.display_name ?? "A trusted contact";
+    const title = "Safety alert escalated";
+    const body = `${displayName} may need attention. Last check-in was missed.`;
 
     const { data: circleMembers } = await supabase
       .from("circle_members")
-      .select("member_user_id")
-      .eq("owner_user_id", setting.user_id)
+      .select("member_user_id,invited_contact")
+      .eq("owner_user_id", job.user_id)
       .eq("status", "accepted");
 
+    const recipientIds = new Set<string>();
     for (const member of circleMembers ?? []) {
-      if (!member.member_user_id || member.member_user_id === setting.user_id) continue;
-      const { data: circleNotification } = await supabase
+      if (member.member_user_id) recipientIds.add(member.member_user_id);
+    }
+
+    const { data: emergencyContacts } = await supabase
+      .from("emergency_contacts")
+      .select("name,contact,auto_notify")
+      .eq("user_id", job.user_id)
+      .eq("auto_notify", true);
+
+    for (const recipientId of recipientIds) {
+      const { data: notification } = await supabase
         .from("notifications")
         .insert({
-          user_id: member.member_user_id,
+          user_id: recipientId,
           type: "missed_check_in",
-          title: circleTitle,
-          body: circleBody,
+          title,
+          body,
           related_entity_id: incident.id,
         })
         .select()
         .single();
 
-      if (circleNotification) {
+      if (notification) {
         await supabase.from("notification_deliveries").insert({
-          notification_id: circleNotification.id,
-          user_id: setting.user_id,
-          recipient_user_id: member.member_user_id,
+          notification_id: notification.id,
+          user_id: job.user_id,
+          recipient_user_id: recipientId,
           channel: "push",
           status: "pending",
         });
-        await sendPush(member.member_user_id, circleTitle, circleBody);
+        await sendPush(recipientId, title, body);
       }
     }
 
-    results.push({ user_id: setting.user_id, incident_id: incident.id });
+    for (const contact of emergencyContacts ?? []) {
+      await supabase.from("notification_deliveries").insert({
+        user_id: job.user_id,
+        recipient_contact: contact.contact,
+        channel: "sms",
+        status: "pending",
+        error_message: "SMS provider not configured",
+      });
+    }
+
+    await supabase
+      .from("alert_incidents")
+      .update({ status: "escalated" })
+      .eq("id", incident.id);
+
+    await supabase
+      .from("alert_jobs")
+      .update({ status: "sent" })
+      .eq("id", job.id);
+
+    await supabase.from("audit_logs").insert({
+      user_id: job.user_id,
+      actor_user_id: job.user_id,
+      action: "alert_escalated",
+      metadata: incident.id,
+    });
+
+    results.push({ job_id: job.id, incident_id: incident.id, recipients: recipientIds.size });
   }
 
   return json({ processed: results.length, results });
@@ -146,7 +134,7 @@ async function sendPush(userId: string, title: string, body: string) {
         message: {
           token: row.token,
           notification: { title, body },
-          data: { title, body, source: "safety-automation" },
+          data: { title, body, source: "alert-escalation" },
         },
       }),
     });

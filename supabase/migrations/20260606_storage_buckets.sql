@@ -13,10 +13,18 @@ create policy "moments-read" on storage.objects
   for select using (bucket_id = 'moments');
 
 create policy "moments-write" on storage.objects
-  for insert with check (bucket_id = 'moments' and auth.role() = 'authenticated');
+  for insert with check (
+    bucket_id = 'moments'
+    and auth.role() = 'authenticated'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
 
 create policy "avatars-read" on storage.objects
   for select using (bucket_id = 'avatars');
 
 create policy "avatars-write" on storage.objects
-  for insert with check (bucket_id = 'avatars' and auth.role() = 'authenticated');
+  for insert with check (
+    bucket_id = 'avatars'
+    and auth.role() = 'authenticated'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );

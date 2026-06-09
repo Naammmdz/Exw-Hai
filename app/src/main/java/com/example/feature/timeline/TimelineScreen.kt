@@ -9,6 +9,8 @@ import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.example.R
 import com.example.core.i18n.appString
@@ -21,14 +23,30 @@ import com.example.data.TimelineEvent
 import com.example.data.TimelineEventType
 
 @Composable
-fun TimelineScreen(events: List<TimelineEvent>) {
+fun TimelineScreen(viewModel: TimelineViewModel) {
+  val state by viewModel.esmeryState.collectAsState()
+  TimelineContent(events = state.timelineEvents)
+}
+
+@Composable
+fun TimelineContent(events: List<TimelineEvent>) {
   ScreenList(title = appString(R.string.timeline), subtitle = t("Your safety history.", "Lịch sử an toàn của bạn.")) {
-    items(events) { event ->
-      InfoCard(
-        icon = event.type.icon(),
-        title = localizedEventText(event.title),
-        body = "${localizedEventText(event.body)} - ${friendlyTimeText(event.createdAt)}",
-      )
+    if (events.isEmpty()) {
+      item {
+        InfoCard(
+          icon = Icons.Rounded.Schedule,
+          title = t("No events yet", "Chưa có sự kiện"),
+          body = t("Your safety history will appear here after check-ins and circle activity.", "Lịch sử an toàn sẽ hiện ở đây sau khi bạn xác nhận an toàn và có hoạt động từ vòng thân."),
+        )
+      }
+    } else {
+      items(events) { event ->
+        InfoCard(
+          icon = event.type.icon(),
+          title = localizedEventText(event.title),
+          body = "${localizedEventText(event.body)} - ${friendlyTimeText(event.createdAt)}",
+        )
+      }
     }
   }
 }

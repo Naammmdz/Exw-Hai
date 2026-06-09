@@ -13,13 +13,13 @@ Deno.serve(async (request) => {
   if (userError || !userData.user) return json({ error: "Unauthorized" }, 401);
 
   const userId = userData.user.id;
-  await supabase.auth.admin.deleteUser(userId, false);
   await supabase.from("audit_logs").insert({
     user_id: userId,
     actor_user_id: userId,
     action: "account_deleted",
     metadata: "delete-account edge function",
   });
+  await supabase.auth.admin.deleteUser(userId, false);
 
   return json({ ok: true, userId });
 });

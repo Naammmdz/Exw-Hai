@@ -35,12 +35,14 @@ import coil.compose.AsyncImage
 import com.example.core.i18n.t
 import com.example.core.ui.CardBlock
 import com.example.core.ui.EsmeryTextField
+import com.example.core.ui.InlineMessage
 import com.example.core.ui.PrimaryButton
 import com.example.core.ui.ScreenList
 import com.example.core.viewmodel.EsmeryViewModelFactory
 import com.example.ui.theme.Apricot
 import com.example.ui.theme.Cocoa
 import com.example.ui.theme.Sage
+import com.example.ui.theme.Taupe
 
 @Composable
 fun ProfileScreen(
@@ -48,10 +50,15 @@ fun ProfileScreen(
   viewModel: ProfileViewModel = viewModel(factory = EsmeryViewModelFactory { ProfileViewModel() }),
 ) {
   val state by viewModel.esmeryState.collectAsState()
+  val toast by viewModel.toast.collectAsState()
   var displayName by remember(state.profile.displayName) { mutableStateOf(state.profile.displayName) }
   var password by remember { mutableStateOf("") }
+  var validationError by remember { mutableStateOf<String?>(null) }
   var showDeleteDialog by remember { mutableStateOf(false) }
   val context = LocalContext.current
+  val emptyNameError = t("Display name cannot be empty.", "Tên hiển thị không được để trống.")
+  val emptyPasswordError = t("Enter a new password.", "Nhập mật khẩu mới.")
+  val shortPasswordError = t("Password must be at least 8 characters.", "Mật khẩu phải có ít nhất 8 ký tự.")
 
   val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
     uri ?: return@rememberLauncherForActivityResult
@@ -88,7 +95,12 @@ fun ProfileScreen(
       CardBlock {
         EsmeryTextField(displayName, { displayName = it }, t("Display name", "Tên hiển thị"))
         PrimaryButton(text = t("Save profile", "Lưu hồ sơ")) {
-          viewModel.onEvent(ProfileUiEvent.UpdateProfile(displayName, state.profile.avatarUrl))
+          validationError = null
+          if (displayName.isBlank()) {
+            validationError = emptyNameError
+            return@PrimaryButton
+          }
+          viewModel.onEvent(ProfileUiEvent.UpdateProfile(displayName.trim(), state.profile.avatarUrl))
         }
       }
     }
@@ -96,12 +108,23 @@ fun ProfileScreen(
       CardBlock {
         EsmeryTextField(password, { password = it }, t("New password", "Mật khẩu mới"))
         PrimaryButton(text = t("Change password", "Đổi mật khẩu")) {
-          if (password.isNotBlank()) {
-            viewModel.onEvent(ProfileUiEvent.ChangePassword(password))
-            password = ""
+          validationError = null
+          when {
+            password.isBlank() -> validationError = emptyPasswordError
+            password.length < 8 -> validationError = shortPasswordError
+            else -> {
+              viewModel.onEvent(ProfileUiEvent.ChangePassword(password))
+              password = ""
+            }
           }
         }
       }
+    }
+    validationError?.let { error ->
+      item { InlineMessage(error) }
+    }
+    toast?.let { message ->
+      item { InlineMessage(message) }
     }
     item {
       Button(
@@ -118,7 +141,7 @@ fun ProfileScreen(
     AlertDialog(
       onDismissRequest = { showDeleteDialog = false },
       title = { Text(t("Delete account?", "Xóa tài khoản?"), color = Cocoa, fontWeight = FontWeight.Black) },
-      text = { Text(t("This permanently removes your account and local data.", "Thao tác này sẽ xóa vĩnh viễn tài khoản và dữ liệu cục bộ.")) },
+      text = { Text(t("This permanently removes your account and local data.", "Thao tác này sẽ xóa vĩnh viễn tài khoản và dữ liệu cục bộ."), color = Taupe) },
       confirmButton = {
         TextButton(onClick = {
           showDeleteDialog = false

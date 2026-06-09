@@ -166,5 +166,3 @@ fun AvatarInitial(name: String, modifier: Modifier = Modifier) {
     }
   }
 }
-
-fun Modifier.esmeryBackground(): Modifier = this.then(Modifier)

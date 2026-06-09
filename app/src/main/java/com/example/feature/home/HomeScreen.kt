@@ -188,7 +188,7 @@ fun HomeScreen(
         )
 
         MainTab.Circle -> CircleScreen(state = state, viewModel = circleViewModel, onToast = { toast = it })
-        MainTab.Timeline -> TimelineScreen(events = state.timelineEvents)
+        MainTab.Timeline -> TimelineScreen(viewModel = timelineViewModel)
         MainTab.Moments -> MomentsScreen(state = state, viewModel = momentsViewModel, onToast = { toast = it })
         MainTab.Safety -> SafetyScreen(state = state, viewModel = safetyViewModel, onToast = { toast = it })
         MainTab.Crisis -> CrisisScreen(state = state, viewModel = crisisViewModel, onToast = { toast = it })
