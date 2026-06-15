@@ -1,12 +1,18 @@
 package com.example.data
 
 import android.util.Log
+import com.example.BuildConfig
 import com.example.supabase
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.functions.functions
 import io.github.jan.supabase.postgrest.from
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.Headers
+import io.ktor.http.HttpHeaders
 import java.util.UUID
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -17,6 +23,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
 private const val TAG = "EsmeryRemote"
 
@@ -41,6 +48,7 @@ class ResilientEsmeryRepository(
 
   override suspend fun refresh() {
     refreshMutex.withLock {
+      local.expireStalePaymentOrders()
       val id = userId ?: return
       val currentEmail = email
       val currentDisplayName = displayName
@@ -410,6 +418,7 @@ class ResilientEsmeryRepository(
   }
 
   override suspend fun markPaymentOrderPaid(referenceCode: String): Entitlement? {
+    if (!BuildConfig.DEBUG) return null
     val entitlement = local.markPaymentOrderPaid(referenceCode)
     if (entitlement != null) {
       remote.tryRemote {
@@ -421,6 +430,34 @@ class ResilientEsmeryRepository(
       }
     }
     return entitlement
+  }
+
+  override suspend fun verifyGooglePlayPurchase(purchaseToken: String, productId: String): Entitlement? {
+    val remoteEntitlement = remote.tryVerifyGooglePlayPurchase(purchaseToken, productId)
+    val entitlement = remoteEntitlement ?: local.verifyGooglePlayPurchase(purchaseToken, productId)
+    if (entitlement != null) {
+      if (remoteEntitlement != null) {
+        local.verifyGooglePlayPurchase(purchaseToken, productId)
+      }
+      remote.tryRemote {
+        local.state.value.paymentOrders.firstOrNull {
+          it.referenceCode.contains(purchaseToken.takeLast(16))
+        }?.let { upsertPaymentOrder(it) }
+        upsertEntitlement(entitlement)
+        upsertSubscription(local.state.value.subscriptionStatus)
+        upsertProfile(local.state.value.profile)
+        local.state.value.auditLogs.firstOrNull()?.let { insertAuditLog(it) }
+      }
+    }
+    return entitlement
+  }
+
+  override suspend fun expireStalePaymentOrders() {
+    local.expireStalePaymentOrders()
+    val expired = local.state.value.paymentOrders.filter { it.status == PaymentOrderStatus.Expired }
+    remote.tryRemote {
+      expired.forEach { upsertPaymentOrder(it) }
+    }
   }
 
   override suspend fun updateProfile(displayName: String, avatarUrl: String?): Profile {
@@ -661,6 +698,7 @@ interface EsmeryRemoteDataSource {
   suspend fun upsertLocationShare(share: LocationShare)
   suspend fun upsertPaymentOrder(order: PaymentOrder)
   suspend fun upsertEntitlement(entitlement: Entitlement)
+  suspend fun verifyGooglePlayPurchase(purchaseToken: String, productId: String): Entitlement?
   suspend fun insertAuditLog(log: AuditLog)
   suspend fun changePassword(newPassword: String)
   suspend fun deleteAccount(userId: String)
@@ -995,6 +1033,26 @@ class SupabaseEsmeryRemoteDataSource(
     client.from("entitlements").upsert(entitlement)
   }
 
+  override suspend fun verifyGooglePlayPurchase(purchaseToken: String, productId: String): Entitlement? {
+    val response = client.functions.invoke(
+      function = "google-play-verify",
+      body = GooglePlayVerifyRequest(purchaseToken = purchaseToken, productId = productId),
+      headers = Headers.build {
+        append(HttpHeaders.ContentType, "application/json")
+      },
+    )
+    val payload = Json.decodeFromString<GooglePlayVerifyResponse>(response.bodyAsText())
+    if (!payload.ok || payload.userId.isNullOrBlank() || payload.plan == null) return null
+    return Entitlement(
+      userId = payload.userId,
+      plan = payload.plan,
+      isPremium = payload.isPremium,
+      source = payload.source ?: EntitlementSource.GooglePlay,
+      validUntil = payload.validUntil,
+      updatedAt = payload.updatedAt ?: LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+    )
+  }
+
   override suspend fun insertAuditLog(log: AuditLog) {
     client.from("audit_logs").insert(log)
   }
@@ -1028,6 +1086,35 @@ class SupabaseEsmeryRemoteDataSource(
     EsmeryRealtime.stopNotifications()
   }
 }
+
+private suspend fun EsmeryRemoteDataSource.tryVerifyGooglePlayPurchase(
+  purchaseToken: String,
+  productId: String,
+): Entitlement? = try {
+  verifyGooglePlayPurchase(purchaseToken, productId)
+} catch (error: CancellationException) {
+  throw error
+} catch (error: Throwable) {
+  Log.e(TAG, "Google Play verify failed", error)
+  null
+}
+
+@Serializable
+private data class GooglePlayVerifyRequest(
+  val purchaseToken: String,
+  val productId: String,
+)
+
+@Serializable
+private data class GooglePlayVerifyResponse(
+  val ok: Boolean = false,
+  @SerialName("user_id") val userId: String? = null,
+  val plan: SubscriptionPlan? = null,
+  @SerialName("is_premium") val isPremium: Boolean = false,
+  val source: EntitlementSource? = null,
+  @SerialName("valid_until") val validUntil: String? = null,
+  @SerialName("updated_at") val updatedAt: String? = null,
+)
 
 private suspend fun EsmeryRemoteDataSource.tryRemote(block: suspend EsmeryRemoteDataSource.() -> Unit) {
   try {

@@ -5,13 +5,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -19,29 +19,25 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import com.example.R
-import com.example.EsmeryServices
 import com.example.core.i18n.appString
 import com.example.core.i18n.t
 import com.example.core.ui.CardBlock
 import com.example.core.ui.ScreenList
 import com.example.data.BillingManager
 import com.example.data.EsmeryState
-import com.example.data.PaymentProvider
 import com.example.data.SubscriptionPlan
 import com.example.ui.theme.Apricot
 import com.example.ui.theme.Cocoa
 import com.example.ui.theme.Sage
 import com.example.ui.theme.Taupe
-import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 
 @Composable
@@ -52,36 +48,77 @@ fun PlansScreen(
 ) {
   val context = LocalContext.current
   val activity = context as? android.app.Activity
+  val scope = rememberCoroutineScope()
+  val checkoutPlan by viewModel.checkoutPlan.collectAsState()
+  val checkoutProvider by viewModel.checkoutProvider.collectAsState()
   val activeOrderReference by viewModel.activeOrderReference.collectAsState()
-  val latestOrder = state.paymentOrders.firstOrNull()
-  val purchaseCompletedMessage = t("Purchase completed.", "Thanh toán hoàn tất.")
-  val billingManager = remember(purchaseCompletedMessage) {
-    BillingManager(context) { plan ->
-      MainScope().launch {
-        EsmeryServices.repository.updateSubscription(plan)
-        onToast(purchaseCompletedMessage)
+  val paymentToast by viewModel.toast.collectAsState()
+
+  val billingManager = remember {
+    BillingManager(context) { purchase ->
+      scope.launch {
+        viewModel.onEvent(PlansUiEvent.VerifyGooglePlayPurchase(purchase))
       }
     }
   }
+  val billingReady by billingManager.isReady.collectAsState()
+  val productsLoaded by billingManager.productsLoaded.collectAsState()
+  val billingError by billingManager.billingError.collectAsState()
 
   DisposableEffect(Unit) {
     billingManager.start()
     onDispose { billingManager.end() }
   }
 
-  val basicSelected = t("Basic Care selected.", "Đã chọn gói Chăm sóc cơ bản.")
-  val orderCreated = t("SePay order created.", "Đã tạo đơn SePay.")
-  val paymentSuccessMessage = t("Payment completed.", "Thanh toán hoàn tất.")
-  val paymentToast by viewModel.toast.collectAsState()
-
   LaunchedEffect(paymentToast) {
     paymentToast?.let {
-      onToast(paymentSuccessMessage)
+      onToast(it)
       viewModel.clearToast()
     }
   }
 
-  ScreenList(title = appString(R.string.plans), subtitle = t("Google Play Billing is the release default; SePay orders support private or web checkout.", "Google Play Billing là mặc định cho bản phát hành; đơn SePay dùng cho kênh riêng hoặc web checkout.")) {
+  if (checkoutPlan != null && checkoutPlan != SubscriptionPlan.Basic) {
+    CheckoutScreen(
+      plan = checkoutPlan!!,
+      state = state,
+      billingManager = billingManager,
+      billingReady = billingReady,
+      productsLoaded = productsLoaded,
+      billingError = billingError,
+      activeOrderReference = activeOrderReference,
+      onBack = { viewModel.onEvent(PlansUiEvent.CloseCheckout) },
+      onSelectProvider = { viewModel.onEvent(PlansUiEvent.SelectCheckoutProvider(it)) },
+      selectedProvider = checkoutProvider,
+      onPayGooglePlay = {
+        if (activity != null && billingManager.canPurchase(checkoutPlan!!)) {
+          billingManager.launchPurchase(activity, checkoutPlan!!)
+        }
+      },
+      onPaySePay = { viewModel.onEvent(PlansUiEvent.CreateSePayOrder(checkoutPlan!!)) },
+    )
+    return
+  }
+
+  val basicSelected = t("Basic Care selected.", "Đã chọn gói Chăm sóc cơ bản.")
+  val openCheckout: (SubscriptionPlan) -> Unit = { plan ->
+    viewModel.onEvent(
+      PlansUiEvent.SelectCheckoutProvider(
+        if (billingReady && productsLoaded) CheckoutProvider.GooglePlay else CheckoutProvider.SePay,
+      ),
+    )
+    viewModel.onEvent(PlansUiEvent.OpenCheckout(plan))
+  }
+
+  ScreenList(
+    title = appString(R.string.plans),
+    subtitle = t(
+      "Choose a plan, then checkout with Google Play or SePay.",
+      "Chọn gói, sau đó thanh toán qua Google Play hoặc SePay.",
+    ),
+  ) {
+    item {
+      SubscriptionStatusCard(state = state, billingManager = billingManager)
+    }
     item {
       PlanCard(
         t("Basic Care", "Chăm sóc cơ bản"),
@@ -98,7 +135,7 @@ fun PlansScreen(
         t("49,000 VND/month - smart inactivity detection and unlimited contacts.", "49.000 VND/tháng - phát hiện không hoạt động thông minh và không giới hạn liên hệ."),
         state.subscriptionStatus.plan == SubscriptionPlan.Monthly,
       ) {
-        if (activity != null) billingManager.launchPurchase(activity, SubscriptionPlan.Monthly)
+        openCheckout(SubscriptionPlan.Monthly)
       }
     }
     item {
@@ -107,56 +144,45 @@ fun PlansScreen(
         t("499,000 VND/year - monthly features plus priority support.", "499.000 VND/năm - gồm tính năng gói tháng và hỗ trợ ưu tiên."),
         state.subscriptionStatus.plan == SubscriptionPlan.Yearly,
       ) {
-        if (activity != null) billingManager.launchPurchase(activity, SubscriptionPlan.Yearly)
+        openCheckout(SubscriptionPlan.Yearly)
       }
     }
     item {
-      CardBlock {
-        Text(t("Production entitlement", "Quyền lợi production"), color = Cocoa, fontWeight = FontWeight.Black)
+      OutlinedButton(
+        onClick = {
+          billingManager.restorePurchases { purchase ->
+            viewModel.handleRestoredPurchase(purchase)
+          }
+        },
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        Text(t("Restore purchases", "Khôi phục gói"), color = Cocoa)
+      }
+    }
+    if (!billingReady || !productsLoaded) {
+      item {
         Text(
-          t(
-            "Plan: ${state.entitlement.plan.name}, premium: ${state.entitlement.isPremium}, source: ${state.entitlement.source.name}.",
-            "Gói: ${state.entitlement.plan.name}, premium: ${state.entitlement.isPremium}, nguồn: ${state.entitlement.source.name}.",
+          billingError ?: t(
+            "Google Play is not ready yet. You can still pay with SePay QR.",
+            "Google Play chưa sẵn sàng. Bạn vẫn có thể thanh toán qua SePay QR.",
           ),
           color = Taupe,
         )
-        if (latestOrder != null) {
-          Text(
-            t(
-              "Latest order: ${latestOrder.referenceCode} - ${latestOrder.status.name}.",
-              "Đơn gần nhất: ${latestOrder.referenceCode} - ${latestOrder.status.name}.",
-            ),
-            color = Taupe,
-          )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          Button(onClick = {
-            viewModel.onEvent(PlansUiEvent.CreateSePayOrder(SubscriptionPlan.Monthly))
-            onToast(orderCreated)
-          }, colors = ButtonDefaults.buttonColors(containerColor = Apricot)) {
-            Text(t("SePay monthly", "SePay tháng"), color = Color.White)
+      }
+    }
+    if (state.paymentOrders.isNotEmpty()) {
+      item {
+        CardBlock {
+          Text(t("Order history", "Lịch sử đơn hàng"), color = Cocoa, fontWeight = FontWeight.Black)
+          state.paymentOrders.take(5).forEach { order ->
+            Text(
+              t(
+                "${order.referenceCode} - ${order.plan.name} - ${order.status.name} (${order.provider.name})",
+                "${order.referenceCode} - ${order.plan.name} - ${order.status.name} (${order.provider.name})",
+              ),
+              color = Taupe,
+            )
           }
-          Button(onClick = {
-            viewModel.onEvent(PlansUiEvent.CreateSePayOrder(SubscriptionPlan.Yearly))
-            onToast(orderCreated)
-          }, colors = ButtonDefaults.buttonColors(containerColor = Apricot)) {
-            Text(t("SePay yearly", "SePay năm"), color = Color.White)
-          }
-        }
-        if (latestOrder?.qrUrl != null) {
-          AsyncImage(
-            model = latestOrder.qrUrl,
-            contentDescription = t("SePay QR", "Mã QR SePay"),
-            modifier = Modifier.fillMaxWidth().height(220.dp),
-            contentScale = ContentScale.Fit,
-          )
-          Text(
-            t("Scan to pay. Status updates automatically.", "Quét để thanh toán. Trạng thái sẽ tự cập nhật."),
-            color = Taupe,
-          )
-        }
-        if (activeOrderReference != null) {
-          Text(t("Waiting for payment: $activeOrderReference", "Đang chờ thanh toán: $activeOrderReference"), color = Taupe)
         }
       }
     }
@@ -164,7 +190,41 @@ fun PlansScreen(
 }
 
 @Composable
-private fun PlanCard(title: String, body: String, selected: Boolean, onSelect: () -> Unit) {
+private fun SubscriptionStatusCard(state: EsmeryState, billingManager: BillingManager) {
+  CardBlock {
+    Text(t("Current subscription", "Gói hiện tại"), color = Cocoa, fontWeight = FontWeight.Black)
+    Text(
+      t(
+        "Plan: ${state.entitlement.plan.name}, premium: ${state.entitlement.isPremium}, source: ${state.entitlement.source.name}.",
+        "Gói: ${state.entitlement.plan.name}, premium: ${state.entitlement.isPremium}, nguồn: ${state.entitlement.source.name}.",
+      ),
+      color = Taupe,
+    )
+    state.entitlement.validUntil?.let { validUntil ->
+      Text(t("Valid until: $validUntil", "Hết hạn: $validUntil"), color = Taupe)
+    }
+    if (state.entitlement.source == com.example.data.EntitlementSource.GooglePlay) {
+      OutlinedButton(onClick = { billingManager.openSubscriptionManagement() }) {
+        Text(t("Manage on Google Play", "Quản lý trên Google Play"), color = Cocoa)
+      }
+    }
+    if (state.entitlement.source == com.example.data.EntitlementSource.SePay) {
+      Text(
+        t("Contact support to cancel SePay subscriptions.", "Liên hệ hỗ trợ để hủy gói SePay."),
+        color = Taupe,
+      )
+    }
+  }
+}
+
+@Composable
+private fun PlanCard(
+  title: String,
+  body: String,
+  selected: Boolean,
+  enabled: Boolean = true,
+  onSelect: () -> Unit,
+) {
   CardBlock(border = if (selected) BorderStroke(2.dp, Apricot) else null) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
       Icon(if (selected) Icons.Rounded.CheckCircle else Icons.Rounded.CreditCard, contentDescription = null, tint = Apricot)
@@ -172,7 +232,11 @@ private fun PlanCard(title: String, body: String, selected: Boolean, onSelect: (
         Text(title, color = Cocoa, fontWeight = FontWeight.Black)
         Text(body, color = Taupe)
       }
-      Button(onClick = onSelect, colors = ButtonDefaults.buttonColors(containerColor = if (selected) Sage else Apricot)) {
+      Button(
+        onClick = onSelect,
+        enabled = enabled,
+        colors = ButtonDefaults.buttonColors(containerColor = if (selected) Sage else Apricot),
+      ) {
         Text(if (selected) t("Active", "Đang dùng") else t("Choose", "Chọn"), color = if (selected) Cocoa else Color.White)
       }
     }

@@ -1,5 +1,6 @@
 package com.example.feature.moments
 
+import com.example.core.entitlement.EntitlementGate
 import com.example.core.viewmodel.BaseEsmeryViewModel
 import com.example.data.EsmeryRepository
 
@@ -23,5 +24,5 @@ class MomentsViewModel(
     }
   }
 
-  fun isPremium(): Boolean = esmeryState.value.entitlement.isPremium
+  fun isPremium(): Boolean = EntitlementGate.isPremiumActive(esmeryState.value)
 }

@@ -158,6 +158,20 @@ class EsmeryRepositoryTest {
     assertEquals(com.example.data.PaymentOrderStatus.Paid, state.paymentOrders.first().status)
     assertEquals(SubscriptionPlan.Monthly, entitlement?.plan)
     assertTrue(state.profile.isPremium)
+    assertNotNull(entitlement?.validUntil)
+  }
+
+  @Test
+  fun googlePlayVerifyCreatesEntitlementWithValidUntil() = runTest {
+    val repository = InMemoryEsmeryRepository()
+
+    val entitlement = repository.verifyGooglePlayPurchase("purchase-token-abc", "esmery_monthly")
+
+    assertNotNull(entitlement)
+    assertEquals(SubscriptionPlan.Monthly, entitlement?.plan)
+    assertEquals(com.example.data.EntitlementSource.GooglePlay, entitlement?.source)
+    assertNotNull(entitlement?.validUntil)
+    assertTrue(repository.state.value.profile.isPremium)
   }
 
   @Test
@@ -404,6 +418,7 @@ private class FakeRemote(
   override suspend fun upsertLocationShare(share: LocationShare) = Unit
   override suspend fun upsertPaymentOrder(order: PaymentOrder) = Unit
   override suspend fun upsertEntitlement(entitlement: Entitlement) = Unit
+  override suspend fun verifyGooglePlayPurchase(purchaseToken: String, productId: String): Entitlement? = null
   override suspend fun insertAuditLog(log: com.example.data.AuditLog) = Unit
   override suspend fun changePassword(newPassword: String) = Unit
   override suspend fun deleteAccount(userId: String) = Unit

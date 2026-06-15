@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.R
+import com.example.core.entitlement.EntitlementGate
 import com.example.core.i18n.LocalAppLanguage
 import com.example.core.i18n.appString
 import com.example.core.i18n.t
@@ -62,8 +63,10 @@ fun CrisisScreen(
   state: EsmeryState,
   viewModel: CrisisViewModel,
   onToast: (String) -> Unit,
+  onNavigateToPlans: () -> Unit = {},
 ) {
   var showAdd by remember { mutableStateOf(false) }
+  var showPremiumDialog by remember { mutableStateOf(false) }
   val context = LocalContext.current
   val language = LocalAppLanguage.current
   val locationPermission = rememberPermissionState(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -151,7 +154,14 @@ fun CrisisScreen(
         }
       }
     }
-    item { PrimaryButton(text = t("Add emergency contact", "Thêm liên hệ khẩn cấp"), icon = Icons.Rounded.Add) { showAdd = true } }
+    item {
+      PrimaryButton(
+        text = t("Add emergency contact", "Thêm liên hệ khẩn cấp"),
+        icon = Icons.Rounded.Add,
+      ) {
+        if (EntitlementGate.canAddEmergencyContact(state)) showAdd = true else showPremiumDialog = true
+      }
+    }
     item {
       InfoCard(
         icon = Icons.Rounded.Security,
@@ -192,6 +202,29 @@ fun CrisisScreen(
         showAdd = false
         onToast(savedMessage)
       },
+    )
+  }
+  if (showPremiumDialog) {
+    AlertDialog(
+      onDismissRequest = { showPremiumDialog = false },
+      title = { Text(t("Premium feature", "Tính năng Premium"), color = Cocoa, fontWeight = FontWeight.Black) },
+      text = {
+        Text(
+          t(
+            "Advanced plans include unlimited emergency contacts.",
+            "Gói Nâng cao cho phép thêm không giới hạn liên hệ khẩn cấp.",
+          ),
+        )
+      },
+      confirmButton = {
+        TextButton(onClick = {
+          showPremiumDialog = false
+          onNavigateToPlans()
+        }) {
+          Text(t("Upgrade", "Nâng cấp"))
+        }
+      },
+      dismissButton = { TextButton(onClick = { showPremiumDialog = false }) { Text(t("Cancel", "Hủy")) } },
     )
   }
 }

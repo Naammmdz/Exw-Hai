@@ -10,6 +10,10 @@ import com.example.feature.circle.CircleViewModel
 import com.example.feature.crisis.CrisisScreen
 import com.example.feature.crisis.CrisisViewModel
 import com.example.feature.hearth.HearthScreen
+import com.example.feature.home.MeHubScreen
+import com.example.feature.home.MeSection
+import com.example.feature.home.MemoriesHubScreen
+import com.example.feature.home.SafetyHubScreen
 import com.example.feature.moments.MomentsScreen
 import com.example.feature.moments.MomentsViewModel
 import com.example.feature.plans.PlansScreen
@@ -17,6 +21,7 @@ import com.example.feature.plans.PlansViewModel
 import com.example.feature.timeline.TimelineContent
 import com.example.feature.safety.SafetyScreen
 import com.example.feature.safety.SafetyViewModel
+import com.example.feature.timeline.TimelineViewModel
 import com.example.ui.theme.MyApplicationTheme
 import org.junit.Rule
 import org.junit.Test
@@ -83,6 +88,49 @@ class EsmeryFeatureSmokeTest {
   fun timelineRendersEmptyState() {
     val repository = InMemoryEsmeryRepository()
     render { TimelineContent(events = repository.state.value.timelineEvents) }
+  }
+
+  @Test
+  fun memoriesHubRenders() {
+    val repository = InMemoryEsmeryRepository()
+    render {
+      MemoriesHubScreen(
+        state = repository.state.value,
+        timelineViewModel = TimelineViewModel(repository),
+        momentsViewModel = MomentsViewModel(repository),
+        onToast = {},
+        onNavigateToPlans = {},
+      )
+    }
+  }
+
+  @Test
+  fun safetyHubRenders() {
+    val repository = InMemoryEsmeryRepository()
+    render {
+      SafetyHubScreen(
+        state = repository.state.value,
+        safetyViewModel = SafetyViewModel(repository),
+        crisisViewModel = CrisisViewModel(repository),
+        onToast = {},
+        onNavigateToPlans = {},
+      )
+    }
+  }
+
+  @Test
+  fun meHubRenders() {
+    val repository = InMemoryEsmeryRepository()
+    render {
+      MeHubScreen(
+        state = repository.state.value,
+        plansViewModel = PlansViewModel(repository),
+        selectedSection = MeSection.Plans,
+        onSectionChange = {},
+        onToast = {},
+        onAccountDeleted = {},
+      )
+    }
   }
 
   private fun render(content: @Composable () -> Unit) {

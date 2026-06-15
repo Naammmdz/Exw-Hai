@@ -48,6 +48,7 @@ fun MomentsScreen(
   state: EsmeryState,
   viewModel: MomentsViewModel,
   onToast: (String) -> Unit,
+  onNavigateToPlans: () -> Unit = {},
 ) {
   var showAdd by remember { mutableStateOf(false) }
   var showPremiumDialog by remember { mutableStateOf(false) }
@@ -82,7 +83,15 @@ fun MomentsScreen(
       onDismissRequest = { showPremiumDialog = false },
       title = { Text(t("Premium feature", "Tính năng Premium"), color = Cocoa, fontWeight = FontWeight.Black) },
       text = { Text(t("Upload your own photos with an Advanced plan.", "Tải ảnh của bạn với gói Nâng cao.")) },
-      confirmButton = { TextButton(onClick = { showPremiumDialog = false }) { Text(t("OK", "Đồng ý")) } },
+      confirmButton = {
+        TextButton(onClick = {
+          showPremiumDialog = false
+          onNavigateToPlans()
+        }) {
+          Text(t("Upgrade", "Nâng cấp"))
+        }
+      },
+      dismissButton = { TextButton(onClick = { showPremiumDialog = false }) { Text(t("Cancel", "Hủy")) } },
     )
   }
 }

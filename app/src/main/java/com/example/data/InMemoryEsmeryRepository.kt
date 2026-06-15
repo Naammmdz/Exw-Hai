@@ -562,11 +562,7 @@ class InMemoryEsmeryRepository : EsmeryRepository {
   override suspend fun createPaymentOrder(plan: SubscriptionPlan, provider: PaymentProvider): PaymentOrder {
     val now = now()
     val reference = "ESM-${userId.take(8)}-${System.currentTimeMillis()}"
-    val amount = when (plan) {
-      SubscriptionPlan.Basic -> 0
-      SubscriptionPlan.Monthly -> 49_000
-      SubscriptionPlan.Yearly -> 499_000
-    }
+    val amount = planAmountVnd(plan)
     val qrUrl = if (provider == PaymentProvider.SePay && amount > 0) {
       "https://qr.sepay.vn/img?amount=$amount&des=$reference"
     } else {
@@ -605,6 +601,7 @@ class InMemoryEsmeryRepository : EsmeryRepository {
       plan = order.plan,
       isPremium = order.plan != SubscriptionPlan.Basic,
       source = source,
+      validUntil = entitlementValidUntil(order.plan, LocalDateTime.now()),
       updatedAt = now,
     )
     mutate {
@@ -617,6 +614,66 @@ class InMemoryEsmeryRepository : EsmeryRepository {
       )
     }
     return entitlement
+  }
+
+  override suspend fun verifyGooglePlayPurchase(purchaseToken: String, productId: String): Entitlement? {
+    val existing = state.value.paymentOrders.firstOrNull {
+      it.referenceCode.contains(purchaseToken.takeLast(16)) && it.status == PaymentOrderStatus.Paid
+    }
+    if (existing != null) return state.value.entitlement
+
+    val plan = when (productId) {
+      "esmery_monthly" -> SubscriptionPlan.Monthly
+      "esmery_yearly" -> SubscriptionPlan.Yearly
+      else -> return null
+    }
+    val now = now()
+    val reference = "GP-${purchaseToken.takeLast(24)}"
+    val order = PaymentOrder(
+      id = id(),
+      userId = userId,
+      provider = PaymentProvider.GooglePlay,
+      plan = plan,
+      amountVnd = planAmountVnd(plan),
+      status = PaymentOrderStatus.Paid,
+      referenceCode = reference,
+      createdAt = now,
+      updatedAt = now,
+    )
+    val entitlement = Entitlement(
+      userId = userId,
+      plan = plan,
+      isPremium = true,
+      source = EntitlementSource.GooglePlay,
+      validUntil = entitlementValidUntil(plan, LocalDateTime.now()),
+      updatedAt = now,
+    )
+    mutate {
+      it.copy(
+        paymentOrders = listOf(order) + it.paymentOrders.filterNot { item -> item.referenceCode == reference },
+        entitlement = entitlement,
+        subscriptionStatus = SubscriptionStatus(userId = userId, plan = plan, isActive = true),
+        profile = it.profile.copy(isPremium = true),
+        auditLogs = listOf(audit(now, "google_play_verified", productId)) + it.auditLogs,
+      )
+    }
+    return entitlement
+  }
+
+  override suspend fun expireStalePaymentOrders() {
+    val now = LocalDateTime.now()
+    mutate { current ->
+      val updatedOrders = current.paymentOrders.map { order ->
+        if (order.status != PaymentOrderStatus.Pending) return@map order
+        val created = runCatching { LocalDateTime.parse(order.createdAt.take(19), formatter) }.getOrNull() ?: return@map order
+        if (Duration.between(created, now).toHours() >= 24) {
+          order.copy(status = PaymentOrderStatus.Expired, updatedAt = now.format(formatter))
+        } else {
+          order
+        }
+      }
+      current.copy(paymentOrders = updatedOrders)
+    }
   }
 
   override suspend fun updateProfile(displayName: String, avatarUrl: String?): Profile {

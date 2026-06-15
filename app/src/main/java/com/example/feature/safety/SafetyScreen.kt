@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import com.example.R
+import com.example.core.entitlement.EntitlementGate
 import com.example.core.i18n.appString
 import com.example.core.i18n.localizedRhythmLabel
 import com.example.core.i18n.t
@@ -40,6 +41,7 @@ fun SafetyScreen(
   state: EsmeryState,
   viewModel: SafetyViewModel,
   onToast: (String) -> Unit,
+  onNavigateToPlans: () -> Unit = {},
 ) {
   var label by remember { mutableStateOf("") }
   var time by remember { mutableStateOf("") }
@@ -69,10 +71,12 @@ fun SafetyScreen(
     item {
       SafetySettingsCard(
         settings = state.safetySettings,
+        isPremium = EntitlementGate.canUseSmartDetection(state),
         onSave = { settings ->
           viewModel.onEvent(SafetyUiEvent.SaveSettings(settings))
           onToast(settingsSavedMessage)
         },
+        onNavigateToPlans = onNavigateToPlans,
       )
     }
     items(state.safetyRhythms) { rhythm ->
@@ -107,7 +111,12 @@ fun SafetyScreen(
 }
 
 @Composable
-private fun SafetySettingsCard(settings: SafetySettings, onSave: (SafetySettings) -> Unit) {
+private fun SafetySettingsCard(
+  settings: SafetySettings,
+  isPremium: Boolean,
+  onSave: (SafetySettings) -> Unit,
+  onNavigateToPlans: () -> Unit,
+) {
   var inactivityHours by remember(settings) { mutableStateOf(settings.inactivityHours) }
   var escalationDelay by remember(settings) { mutableStateOf(settings.escalationDelayMinutes) }
   var locationSharing by remember(settings) { mutableStateOf(settings.locationSharingEnabled) }
@@ -116,7 +125,14 @@ private fun SafetySettingsCard(settings: SafetySettings, onSave: (SafetySettings
     Text(t("Inactivity window", "Ngưỡng không hoạt động"), color = Taupe)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
       listOf(2, 4, 12).forEach { hours ->
-        FilterChip(selected = inactivityHours == hours, onClick = { inactivityHours = hours }, label = { Text("${hours}h") })
+        val premiumOnly = hours < 4
+        FilterChip(
+          selected = inactivityHours == hours,
+          onClick = {
+            if (premiumOnly && !isPremium) onNavigateToPlans() else inactivityHours = hours
+          },
+          label = { Text("${hours}h${if (premiumOnly && !isPremium) " ★" else ""}") },
+        )
       }
     }
     Text(t("Escalation delay", "Thời gian chờ cảnh báo"), color = Taupe)

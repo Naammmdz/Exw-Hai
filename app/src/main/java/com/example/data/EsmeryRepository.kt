@@ -31,6 +31,8 @@ interface EsmeryRepository {
   suspend fun shareEmergencyLocation(latitude: Double, longitude: Double, accuracyMeters: Double? = null): LocationShare
   suspend fun createPaymentOrder(plan: SubscriptionPlan, provider: PaymentProvider): PaymentOrder
   suspend fun markPaymentOrderPaid(referenceCode: String): Entitlement?
+  suspend fun verifyGooglePlayPurchase(purchaseToken: String, productId: String): Entitlement?
+  suspend fun expireStalePaymentOrders()
   suspend fun updateProfile(displayName: String, avatarUrl: String? = null): Profile
   suspend fun changePassword(newPassword: String)
   suspend fun deleteAccount()

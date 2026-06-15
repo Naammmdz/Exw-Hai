@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.R
+import com.example.core.entitlement.EntitlementGate
 import com.example.core.i18n.LocalAppLanguage
 import com.example.core.i18n.appString
 import com.example.core.i18n.friendlyTimeText
@@ -62,9 +63,11 @@ fun CircleScreen(
   state: EsmeryState,
   viewModel: CircleViewModel,
   onToast: (String) -> Unit,
+  onNavigateToPlans: () -> Unit = {},
 ) {
   var showAdd by remember { mutableStateOf(false) }
   var showQr by remember { mutableStateOf(false) }
+  var showPremiumDialog by remember { mutableStateOf(false) }
   var scannedContact by remember { mutableStateOf("") }
   val language = LocalAppLanguage.current
   val acceptedMessage = t("Friend request accepted.", "Đã chấp nhận lời mời.")
@@ -104,7 +107,9 @@ fun CircleScreen(
   ScreenList(title = appString(R.string.circle), subtitle = t("Trusted people who can receive safety alerts.", "Những người tin cậy có thể nhận cảnh báo an toàn.")) {
     item {
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        PrimaryButton(text = appString(R.string.add_friend), icon = Icons.Rounded.Add) { showAdd = true }
+        PrimaryButton(text = appString(R.string.add_friend), icon = Icons.Rounded.Add) {
+          if (EntitlementGate.canAddCircleMember(state)) showAdd = true else showPremiumDialog = true
+        }
         OutlinedButton(onClick = { showQr = true }, shape = RoundedCornerShape(8.dp)) {
           Icon(Icons.Rounded.QrCodeScanner, contentDescription = null, tint = Cocoa)
           Text(t("Scan QR", "Quét QR"), color = Cocoa)
@@ -174,6 +179,29 @@ fun CircleScreen(
         showAdd = false
         onToast(invitationSentMessage)
       },
+    )
+  }
+  if (showPremiumDialog) {
+    AlertDialog(
+      onDismissRequest = { showPremiumDialog = false },
+      title = { Text(t("Premium feature", "Tính năng Premium"), color = Cocoa, fontWeight = FontWeight.Black) },
+      text = {
+        Text(
+          t(
+            "Advanced plans include unlimited circle members.",
+            "Gói Nâng cao cho phép thêm không giới hạn thành viên vòng thân.",
+          ),
+        )
+      },
+      confirmButton = {
+        TextButton(onClick = {
+          showPremiumDialog = false
+          onNavigateToPlans()
+        }) {
+          Text(t("Upgrade", "Nâng cấp"))
+        }
+      },
+      dismissButton = { TextButton(onClick = { showPremiumDialog = false }) { Text(t("Cancel", "Hủy")) } },
     )
   }
 }

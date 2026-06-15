@@ -14,14 +14,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.LocalFlorist
 import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Security
-import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -54,18 +51,12 @@ import com.example.core.viewmodel.EsmeryViewModelFactory
 import com.example.data.EsmeryRepository
 import com.example.feature.circle.CircleScreen
 import com.example.feature.circle.CircleViewModel
-import com.example.feature.crisis.CrisisScreen
 import com.example.feature.crisis.CrisisViewModel
 import com.example.feature.hearth.HearthScreen
 import com.example.feature.hearth.HearthViewModel
-import com.example.feature.moments.MomentsScreen
 import com.example.feature.moments.MomentsViewModel
-import com.example.feature.plans.PlansScreen
 import com.example.feature.plans.PlansViewModel
-import com.example.feature.profile.ProfileScreen
-import com.example.feature.safety.SafetyScreen
 import com.example.feature.safety.SafetyViewModel
-import com.example.feature.timeline.TimelineScreen
 import com.example.feature.timeline.TimelineViewModel
 import com.example.ui.theme.Apricot
 import com.example.ui.theme.Cocoa
@@ -78,12 +69,9 @@ import kotlinx.coroutines.launch
 private enum class MainTab(val labelRes: Int, val icon: ImageVector) {
   Hearth(R.string.hearth, Icons.Rounded.Home),
   Circle(R.string.circle, Icons.Rounded.Group),
-  Timeline(R.string.timeline, Icons.Rounded.Schedule),
-  Moments(R.string.moments, Icons.Rounded.LocalFlorist),
+  Memories(R.string.memories, Icons.Rounded.LocalFlorist),
   Safety(R.string.safety, Icons.Rounded.Security),
-  Crisis(R.string.crisis, Icons.Rounded.Warning),
-  Plans(R.string.plans, Icons.Rounded.CreditCard),
-  Profile(R.string.profile, Icons.Rounded.Person),
+  Me(R.string.me, Icons.Rounded.Person),
 }
 
 @Composable
@@ -104,10 +92,15 @@ fun HomeScreen(
 
   val state by hearthViewModel.esmeryState.collectAsState()
   var selectedTab by remember { mutableStateOf(MainTab.Hearth) }
+  var meSection by remember { mutableStateOf(MeSection.Profile) }
   val scope = rememberCoroutineScope()
   var toast by remember { mutableStateOf<String?>(null) }
   val context = LocalContext.current
   val circleNotifiedToast = t("Your circle has been notified.", "Vòng thân của bạn đã được thông báo.")
+  val navigateToPlans = {
+    selectedTab = MainTab.Me
+    meSection = MeSection.Plans
+  }
 
   LaunchedEffect(toast) {
     if (toast != null) {
@@ -187,19 +180,43 @@ fun HomeScreen(
           },
         )
 
-        MainTab.Circle -> CircleScreen(state = state, viewModel = circleViewModel, onToast = { toast = it })
-        MainTab.Timeline -> TimelineScreen(viewModel = timelineViewModel)
-        MainTab.Moments -> MomentsScreen(state = state, viewModel = momentsViewModel, onToast = { toast = it })
-        MainTab.Safety -> SafetyScreen(state = state, viewModel = safetyViewModel, onToast = { toast = it })
-        MainTab.Crisis -> CrisisScreen(state = state, viewModel = crisisViewModel, onToast = { toast = it })
-        MainTab.Plans -> PlansScreen(state = state, viewModel = plansViewModel, onToast = { toast = it })
-        MainTab.Profile -> ProfileScreen(onAccountDeleted = {
-          scope.launch {
-            repository.stopNotificationRealtime()
-            authGateway.signOut()
-            onSignedOut()
-          }
-        })
+        MainTab.Circle -> CircleScreen(
+          state = state,
+          viewModel = circleViewModel,
+          onToast = { toast = it },
+          onNavigateToPlans = navigateToPlans,
+        )
+
+        MainTab.Memories -> MemoriesHubScreen(
+          state = state,
+          timelineViewModel = timelineViewModel,
+          momentsViewModel = momentsViewModel,
+          onToast = { toast = it },
+          onNavigateToPlans = navigateToPlans,
+        )
+
+        MainTab.Safety -> SafetyHubScreen(
+          state = state,
+          safetyViewModel = safetyViewModel,
+          crisisViewModel = crisisViewModel,
+          onToast = { toast = it },
+          onNavigateToPlans = navigateToPlans,
+        )
+
+        MainTab.Me -> MeHubScreen(
+          state = state,
+          plansViewModel = plansViewModel,
+          selectedSection = meSection,
+          onSectionChange = { meSection = it },
+          onToast = { toast = it },
+          onAccountDeleted = {
+            scope.launch {
+              repository.stopNotificationRealtime()
+              authGateway.signOut()
+              onSignedOut()
+            }
+          },
+        )
       }
 
       toast?.let {
@@ -222,7 +239,7 @@ fun HomeScreen(
 private fun TabButton(tab: MainTab, selected: Boolean, onClick: () -> Unit) {
   Column(
     modifier = Modifier
-      .width(44.dp)
+      .width(56.dp)
       .clickable(onClick = onClick)
       .padding(vertical = 4.dp),
     horizontalAlignment = Alignment.CenterHorizontally,
